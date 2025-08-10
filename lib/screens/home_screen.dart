@@ -9,13 +9,14 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
 
-    // If somehow we got here without a user, send back to login.
+    // If not logged in, kick back to login
     if (user == null) {
       Future.microtask(() => Navigator.pushReplacementNamed(context, '/login'));
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    final usersRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
+    final usersRef =
+        FirebaseFirestore.instance.collection('users').doc(user.uid);
     final postsRef = FirebaseFirestore.instance
         .collection('posts')
         .orderBy('createdAt', descending: true);
@@ -23,7 +24,7 @@ class HomeScreen extends StatelessWidget {
     return Scaffold(
       body: SafeArea(
         child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-          stream: usersRef.snapshots(), // live updates to name/photo
+          stream: usersRef.snapshots(),
           builder: (context, userSnap) {
             final data = userSnap.data?.data() ?? {};
             final username = (data['username'] as String?)?.trim();
@@ -31,6 +32,7 @@ class HomeScreen extends StatelessWidget {
 
             return CustomScrollView(
               slivers: [
+                // Greeting row
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -39,9 +41,10 @@ class HomeScreen extends StatelessWidget {
                         _Avatar(photoUrl: photoUrl),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: _Greeting(username: username ?? _fallbackName(user.email)),
+                          child: _Greeting(
+                            username: username ?? _fallbackName(user.email),
+                          ),
                         ),
-                        // Optional: small menu icon placeholder
                         IconButton(
                           onPressed: () {},
                           icon: const Icon(Icons.more_horiz),
@@ -53,9 +56,9 @@ class HomeScreen extends StatelessWidget {
 
                 // Big headline
                 SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                    child: const Text(
+                  child: const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 12, 16, 8),
+                    child: Text(
                       'Turn feedback into\nbrilliant design',
                       style: TextStyle(
                         fontSize: 28,
@@ -66,7 +69,7 @@ class HomeScreen extends StatelessWidget {
                   ),
                 ),
 
-                // Sort/Filter row (non-functional stub for now)
+                // Sort / Filter (stubs)
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -89,13 +92,13 @@ class HomeScreen extends StatelessWidget {
                 ),
 
                 // Posts list
-                SliverToBoxAdapter(child: const SizedBox(height: 12)),
+                const SliverToBoxAdapter(child: SizedBox(height: 12)),
                 SliverToBoxAdapter(
                   child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                     stream: postsRef.snapshots(),
                     builder: (context, snap) {
                       if (snap.hasError) {
-                        return _StatusMessage(
+                        return const _StatusMessage(
                           icon: Icons.error_outline,
                           title: 'Couldn’t load posts',
                           message: 'Please try again in a moment.',
@@ -107,30 +110,34 @@ class HomeScreen extends StatelessWidget {
                           child: Center(child: CircularProgressIndicator()),
                         );
                       }
-                      final docs = snap.data?.docs ?? [];
 
+                      final docs = snap.data?.docs ?? [];
                       if (docs.isEmpty) {
-                        // Placeholder when no posts exist yet
-                        return _StatusMessage(
+                        return const _StatusMessage(
                           icon: Icons.forum_outlined,
                           title: 'No posts yet',
                           message: 'Be the first to share your work!',
                         );
                       }
 
-                      // Basic list (replace with your real PostCard later)
                       return ListView.separated(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
                         padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                         itemCount: docs.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 16),
+                        separatorBuilder: (_, __) =>
+                            const SizedBox(height: 16),
                         itemBuilder: (context, i) {
                           final p = docs[i].data();
                           final title = (p['title'] as String?) ?? 'Untitled';
-                          final author = (p['authorName'] as String?) ?? 'Anonymous';
-                          final image = (p['coverUrl'] as String?); // optional
-                          return _PostCardStub(title: title, author: author, imageUrl: image);
+                          final author =
+                              (p['authorName'] as String?) ?? 'Anonymous';
+                          final image = (p['coverUrl'] as String?);
+                          return _PostCardStub(
+                            title: title,
+                            author: author,
+                            imageUrl: image,
+                          );
                         },
                       );
                     },
@@ -142,7 +149,7 @@ class HomeScreen extends StatelessWidget {
         ),
       ),
 
-      // Simple bottom nav like your mock (non-functional stubs for now)
+      // Bottom navigation — Upload navigates to '/upload'
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
@@ -151,14 +158,26 @@ class HomeScreen extends StatelessWidget {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(28),
-              boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, 2))],
+              boxShadow: const [
+                BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, 2))
+              ],
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: const [
-                _NavItem(icon: Icons.home_rounded, label: 'Home', active: true),
-                _NavItem(icon: Icons.add_circle_outline, label: 'Upload'),
-                _NavItem(icon: Icons.person_rounded, label: 'Profile'),
+              children: [
+                const _NavItem(icon: Icons.home_rounded, label: 'Home', active: true),
+                _NavItem(
+                  icon: Icons.add_circle_outline,
+                  label: 'Upload',
+                  onTap: () => Navigator.pushNamed(context, '/upload'),
+                ),
+                _NavItem(
+                  icon: Icons.person_rounded,
+                  label: 'Profile',
+                  onTap: () {
+                    // TODO: push to profile when you build it
+                  },
+                ),
               ],
             ),
           ),
@@ -180,10 +199,7 @@ class _Avatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (photoUrl != null && photoUrl!.isNotEmpty) {
-      return CircleAvatar(
-        radius: 20,
-        backgroundImage: NetworkImage(photoUrl!),
-      );
+      return CircleAvatar(radius: 20, backgroundImage: NetworkImage(photoUrl!));
     }
     return CircleAvatar(
       radius: 20,
@@ -215,10 +231,20 @@ class _Greeting extends StatelessWidget {
 }
 
 class _StatusMessage extends StatelessWidget {
-  const _StatusMessage({required this.icon, required this.title, required this.message});
+  const _StatusMessage({
+    required this.icon,
+    required this.title,
+    required this.message,
+  });
+
   final IconData icon;
   final String title;
   final String message;
+
+  const _StatusMessage.noPosts()
+      : icon = Icons.forum_outlined,
+        title = 'No posts yet',
+        message = 'Be the first to share your work!';
 
   @override
   Widget build(BuildContext context) {
@@ -228,9 +254,13 @@ class _StatusMessage extends StatelessWidget {
         children: [
           Icon(icon, size: 40, color: Colors.black54),
           const SizedBox(height: 12),
-          Text(title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18)),
+          Text(title,
+              style:
+                  const TextStyle(fontWeight: FontWeight.w700, fontSize: 18)),
           const SizedBox(height: 6),
-          Text(message, textAlign: TextAlign.center, style: const TextStyle(color: Colors.black54)),
+          Text(message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.black54)),
         ],
       ),
     );
@@ -238,7 +268,12 @@ class _StatusMessage extends StatelessWidget {
 }
 
 class _PostCardStub extends StatelessWidget {
-  const _PostCardStub({required this.title, required this.author, this.imageUrl});
+  const _PostCardStub({
+    required this.title,
+    required this.author,
+    this.imageUrl,
+  });
+
   final String title;
   final String author;
   final String? imageUrl;
@@ -257,7 +292,8 @@ class _PostCardStub extends StatelessWidget {
           children: [
             if (imageUrl != null && imageUrl!.isNotEmpty)
               ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(16)),
                 child: AspectRatio(
                   aspectRatio: 16 / 9,
                   child: Image.network(imageUrl!, fit: BoxFit.cover),
@@ -268,9 +304,12 @@ class _PostCardStub extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                  Text(title,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w700, fontSize: 16)),
                   const SizedBox(height: 4),
-                  Text('by $author', style: const TextStyle(color: Colors.black54)),
+                  Text('by $author',
+                      style: const TextStyle(color: Colors.black54)),
                 ],
               ),
             ),
@@ -282,21 +321,35 @@ class _PostCardStub extends StatelessWidget {
 }
 
 class _NavItem extends StatelessWidget {
-  const _NavItem({required this.icon, required this.label, this.active = false});
+  const _NavItem({
+    required this.icon,
+    required this.label,
+    this.active = false,
+    this.onTap,
+  });
+
   final IconData icon;
   final String label;
   final bool active;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final color = active ? const Color(0xFFD9C63F) : Colors.black87;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, color: color),
-        const SizedBox(height: 2),
-        Text(label, style: TextStyle(fontSize: 12, color: color)),
-      ],
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: color),
+            const SizedBox(height: 2),
+            Text(label, style: TextStyle(fontSize: 12, color: color)),
+          ],
+        ),
+      ),
     );
   }
 }

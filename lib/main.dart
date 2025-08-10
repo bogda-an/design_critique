@@ -5,6 +5,8 @@ import 'firebase_options.dart';
 import 'screens/login_screen.dart';
 import 'screens/signup_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/upload_screen.dart';
+import 'screens/post_thanks_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -64,6 +66,8 @@ class DesignCritiqueApp extends StatelessWidget {
         '/login': (_) => const LoginScreen(),
         '/signup': (_) => const SignUpScreen(),
         '/home': (_) => const HomeScreen(),
+        '/upload': (_) => const UploadScreen(),
+        '/postThanks': (_) => const PostThanksScreen(),
       },
     );
   }
