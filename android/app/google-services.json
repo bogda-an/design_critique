@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1040318448307",
+    "project_id": "design-critique-c5f45",
+    "storage_bucket": "design-critique-c5f45.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1040318448307:android:d6233336b4a35e2b63a6c6",
+        "android_client_info": {
+          "package_name": "com.designcritique.design_critique"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDOjWvDZpP4x-1OulTUOqLAgFQ4ru-PRMg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
