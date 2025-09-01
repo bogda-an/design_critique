@@ -2,22 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+// Route args (so we can push with strong types)
+import '../widgets/app_bottom_nav.dart';
+import 'feedback_screen.dart' show FeedbackScreenArgs;
+import 'comments_screen.dart' show CommentsArgs;
+
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
-
-    // If not logged in, kick back to login
-    if (user == null) {
-      Future.microtask(() => Navigator.pushReplacementNamed(context, '/login'));
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
+    if (user == null) return const _LoginRedirect();
 
     final usersRef =
         FirebaseFirestore.instance.collection('users').doc(user.uid);
-    final postsRef = FirebaseFirestore.instance
+
+    final postsQuery = FirebaseFirestore.instance
         .collection('posts')
         .orderBy('createdAt', descending: true);
 
@@ -26,13 +27,13 @@ class HomeScreen extends StatelessWidget {
         child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
           stream: usersRef.snapshots(),
           builder: (context, userSnap) {
-            final data = userSnap.data?.data() ?? {};
-            final username = (data['username'] as String?)?.trim();
-            final photoUrl = (data['photoUrl'] as String?)?.trim();
+            final me = userSnap.data?.data() ?? {};
+            final username = (me['username'] as String?)?.trim();
+            final photoUrl = (me['photoUrl'] as String?)?.trim();
 
             return CustomScrollView(
               slivers: [
-                // Greeting row
+                // Greeting
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -54,9 +55,8 @@ class HomeScreen extends StatelessWidget {
                   ),
                 ),
 
-                // Big headline
-                SliverToBoxAdapter(
-                  child: const Padding(
+                const SliverToBoxAdapter(
+                  child: Padding(
                     padding: EdgeInsets.fromLTRB(16, 12, 16, 8),
                     child: Text(
                       'Turn feedback into\nbrilliant design',
@@ -69,7 +69,7 @@ class HomeScreen extends StatelessWidget {
                   ),
                 ),
 
-                // Sort / Filter (stubs)
+                // Sort / Filter (visual only)
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -90,12 +90,12 @@ class HomeScreen extends StatelessWidget {
                     ),
                   ),
                 ),
+                const SliverToBoxAdapter(child: SizedBox(height: 12)),
 
                 // Posts list
-                const SliverToBoxAdapter(child: SizedBox(height: 12)),
                 SliverToBoxAdapter(
                   child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                    stream: postsRef.snapshots(),
+                    stream: postsQuery.snapshots(),
                     builder: (context, snap) {
                       if (snap.hasError) {
                         return const _StatusMessage(
@@ -128,15 +128,28 @@ class HomeScreen extends StatelessWidget {
                         separatorBuilder: (_, __) =>
                             const SizedBox(height: 16),
                         itemBuilder: (context, i) {
-                          final p = docs[i].data();
-                          final title = (p['title'] as String?) ?? 'Untitled';
-                          final author =
+                          final doc = docs[i];
+                          final p = doc.data();
+                          final postId = doc.id;
+
+                          final title =
+                              (p['title'] as String?) ?? 'Untitled design';
+                          final description =
+                              (p['description'] as String?) ?? '';
+                          final authorId = (p['authorId'] as String?) ?? '';
+                          final authorName =
                               (p['authorName'] as String?) ?? 'Anonymous';
-                          final image = (p['coverUrl'] as String?);
-                          return _PostCardStub(
+                          final coverUrl = (p['coverUrl'] as String?);
+                          final createdAt = p['createdAt'];
+
+                          return _PostCard(
+                            postId: postId,
                             title: title,
-                            author: author,
-                            imageUrl: image,
+                            description: description,
+                            authorId: authorId,
+                            authorName: authorName,
+                            coverUrl: coverUrl,
+                            createdAt: createdAt,
                           );
                         },
                       );
@@ -149,40 +162,8 @@ class HomeScreen extends StatelessWidget {
         ),
       ),
 
-      // Bottom navigation — Upload navigates to '/upload'
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(28),
-              boxShadow: const [
-                BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, 2))
-              ],
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                const _NavItem(icon: Icons.home_rounded, label: 'Home', active: true),
-                _NavItem(
-                  icon: Icons.add_circle_outline,
-                  label: 'Upload',
-                  onTap: () => Navigator.pushNamed(context, '/upload'),
-                ),
-                _NavItem(
-                  icon: Icons.person_rounded,
-                  label: 'Profile',
-                  onTap: () {
-                    // TODO: push to profile when you build it
-                  },
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+      // ✅ unified bottom nav (works the same on all pages)
+      bottomNavigationBar: const AppBottomNav(current: BottomTab.home),
     );
   }
 
@@ -190,6 +171,28 @@ class HomeScreen extends StatelessWidget {
     if (email == null || !email.contains('@')) return 'there';
     return email.split('@').first;
   }
+}
+
+/// Redirect helper so we don’t use BuildContext across async gaps
+class _LoginRedirect extends StatefulWidget {
+  const _LoginRedirect();
+  @override
+  State<_LoginRedirect> createState() => _LoginRedirectState();
+}
+
+class _LoginRedirectState extends State<_LoginRedirect> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Navigator.of(context).pushReplacementNamed('/login');
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      const Scaffold(body: Center(child: CircularProgressIndicator()));
 }
 
 class _Avatar extends StatelessWidget {
@@ -241,11 +244,6 @@ class _StatusMessage extends StatelessWidget {
   final String title;
   final String message;
 
-  const _StatusMessage.noPosts()
-      : icon = Icons.forum_outlined,
-        title = 'No posts yet',
-        message = 'Be the first to share your work!';
-
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -254,102 +252,407 @@ class _StatusMessage extends StatelessWidget {
         children: [
           Icon(icon, size: 40, color: Colors.black54),
           const SizedBox(height: 12),
-          Text(title,
-              style:
-                  const TextStyle(fontWeight: FontWeight.w700, fontSize: 18)),
+          Text(
+            title,
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
+          ),
           const SizedBox(height: 6),
-          Text(message,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.black54)),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.black54),
+          ),
         ],
       ),
     );
   }
 }
 
-class _PostCardStub extends StatelessWidget {
-  const _PostCardStub({
+/// ===== Post Card =====
+class _PostCard extends StatelessWidget {
+  const _PostCard({
+    required this.postId,
     required this.title,
-    required this.author,
-    this.imageUrl,
+    required this.description,
+    required this.authorId,
+    required this.authorName,
+    required this.coverUrl,
+    required this.createdAt,
   });
 
+  final String postId;
   final String title;
-  final String author;
-  final String? imageUrl;
+  final String description;
+  final String authorId;
+  final String authorName;
+  final String? coverUrl;
+  final dynamic createdAt;
 
   @override
   Widget build(BuildContext context) {
+    final borderRadius = BorderRadius.circular(16);
+    final currentUid = FirebaseAuth.instance.currentUser!.uid;
+
     return Material(
       color: Colors.white,
       elevation: 1,
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: () {},
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (imageUrl != null && imageUrl!.isNotEmpty)
-              ClipRRect(
-                borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(16)),
-                child: AspectRatio(
-                  aspectRatio: 16 / 9,
-                  child: Image.network(imageUrl!, fit: BoxFit.cover),
-                ),
-              ),
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w700, fontSize: 16)),
-                  const SizedBox(height: 4),
-                  Text('by $author',
-                      style: const TextStyle(color: Colors.black54)),
-                ],
-              ),
+      borderRadius: borderRadius,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (coverUrl != null && coverUrl!.isNotEmpty)
+            _SquareNetworkImage(
+              url: coverUrl!,
+              maxSide: 340,
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(16)),
             ),
-          ],
-        ),
+
+          // Body
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Title
+                Text(
+                  title,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w800, fontSize: 18, height: 1.15),
+                ),
+                const SizedBox(height: 6),
+
+                // Feedback summary (stars + grade + count)
+                _FeedbackSummary(postId: postId),
+
+                const SizedBox(height: 10),
+
+                // Author line (avatar + name + date)
+                _AuthorLine(
+                  authorId: authorId,
+                  authorName: authorName,
+                  createdAt: createdAt,
+                ),
+
+                const SizedBox(height: 10),
+
+                // Description
+                if (description.isNotEmpty)
+                  Text(
+                    description,
+                    style: const TextStyle(color: Colors.black87, height: 1.3),
+                  ),
+
+                const SizedBox(height: 12),
+
+                // Action row: Give Feedback / Comments
+                _ActionsRow(
+                  postId: postId,
+                  currentUid: currentUid,
+                  title: title,
+                  authorName: authorName,
+                  coverUrl: coverUrl,
+                  createdAt: createdAt,
+                  description: description,
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-class _NavItem extends StatelessWidget {
-  const _NavItem({
-    required this.icon,
-    required this.label,
-    this.active = false,
-    this.onTap,
+/// Square 340x340 image, crops from the bottom (keeps top).
+class _SquareNetworkImage extends StatelessWidget {
+  const _SquareNetworkImage({
+    required this.url,
+    this.maxSide = 340,
+    this.borderRadius,
   });
 
-  final IconData icon;
-  final String label;
-  final bool active;
-  final VoidCallback? onTap;
+  final String url;
+  final double maxSide;
+  final BorderRadius? borderRadius;
 
   @override
   Widget build(BuildContext context) {
-    final color = active ? const Color(0xFFD9C63F) : Colors.black87;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+    return LayoutBuilder(
+      builder: (context, c) {
+        final double available = c.maxWidth == double.infinity
+            ? MediaQuery.of(context).size.width
+            : c.maxWidth;
+        final double side = available < maxSide ? available : maxSide;
+
+        return Center(
+          child: ClipRRect(
+            borderRadius: borderRadius ?? BorderRadius.circular(16),
+            child: SizedBox(
+              width: side,
+              height: side,
+              child: Image.network(
+                url,
+                fit: BoxFit.cover,
+                alignment: Alignment.topCenter, // keep top, crop bottom
+                errorBuilder: (_, __, ___) => Container(
+                  color: Colors.grey.shade200,
+                  alignment: Alignment.center,
+                  child: const Icon(Icons.broken_image_outlined),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Stars + numeric + feedback count (live from posts/{postId}/feedback)
+class _FeedbackSummary extends StatelessWidget {
+  const _FeedbackSummary({required this.postId});
+  final String postId;
+
+  @override
+  Widget build(BuildContext context) {
+    final fbRef = FirebaseFirestore.instance
+        .collection('posts')
+        .doc(postId)
+        .collection('feedback');
+
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: fbRef.snapshots(),
+      builder: (context, snap) {
+        final docs = snap.data?.docs ?? [];
+        int count = docs.length;
+        double avg = 0;
+        if (count > 0) {
+          double sum = 0;
+          for (final d in docs) {
+            final m = d.data();
+            final ratings = (m['ratings'] as Map?) ?? {};
+            final overall = ratings['overall'];
+            if (overall is num) sum += overall.toDouble();
+          }
+          avg = sum / count;
+        }
+
+        return Row(
           children: [
-            Icon(icon, color: color),
-            const SizedBox(height: 2),
-            Text(label, style: TextStyle(fontSize: 12, color: color)),
+            _Stars(value: avg),
+            const SizedBox(width: 6),
+            Text(avg.toStringAsFixed(1),
+                style: const TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(width: 10),
+            const Icon(Icons.chat_bubble_outline,
+                size: 18, color: Colors.black54),
+            const SizedBox(width: 4),
+            Text('$count', style: const TextStyle(color: Colors.black54)),
           ],
-        ),
-      ),
+        );
+      },
+    );
+  }
+}
+
+/// 0..5 stars supporting halves
+class _Stars extends StatelessWidget {
+  const _Stars({required this.value});
+  final double value;
+
+  @override
+  Widget build(BuildContext context) {
+    const double iconSize = 18;
+
+    final full = value.floor();
+    final frac = value - full;
+    final hasHalf = frac >= 0.25 && frac < 0.75;
+    final extraFull = frac >= 0.75 ? 1 : 0;
+
+    final icons = <Widget>[];
+    for (int i = 0; i < 5; i++) {
+      IconData icon;
+      if (i < full + extraFull) {
+        icon = Icons.star;
+      } else if (i == full && hasHalf) {
+        icon = Icons.star_half;
+      } else {
+        icon = Icons.star_border;
+      }
+      icons.add(Icon(icon, size: iconSize, color: const Color(0xFFD9C63F)));
+    }
+    return Row(children: icons);
+  }
+}
+
+/// Author avatar + name + post date
+class _AuthorLine extends StatelessWidget {
+  const _AuthorLine({
+    required this.authorId,
+    required this.authorName,
+    required this.createdAt,
+  });
+
+  final String authorId;
+  final String authorName;
+  final dynamic createdAt;
+
+  @override
+  Widget build(BuildContext context) {
+    final usersRef =
+        FirebaseFirestore.instance.collection('users').doc(authorId);
+
+    return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      future: usersRef.get(),
+      builder: (context, snap) {
+        final map = snap.data?.data();
+        final String? photoUrl = map?['photoUrl'] as String?;
+
+        final dt = _toDate(createdAt);
+        final dateText = dt == null ? '' : _formatDate(dt);
+
+        return Row(
+          children: [
+            if (photoUrl != null && photoUrl.isNotEmpty)
+              CircleAvatar(radius: 18, backgroundImage: NetworkImage(photoUrl))
+            else
+              CircleAvatar(
+                radius: 18,
+                backgroundColor: Colors.grey.shade200,
+                child: Icon(Icons.person, color: Colors.grey.shade700),
+              ),
+            const SizedBox(width: 10),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(authorName,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 16)),
+                if (dateText.isNotEmpty)
+                  Text(dateText, style: const TextStyle(color: Colors.black54)),
+              ],
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  DateTime? _toDate(dynamic ts) {
+    try {
+      if (ts == null) return null;
+      if (ts is DateTime) return ts;
+      if (ts is Timestamp) return ts.toDate();
+    } catch (_) {}
+    return null;
+  }
+
+  String _formatDate(DateTime d) {
+    const months = [
+      'January','February','March','April','May','June',
+      'July','August','September','October','November','December'
+    ];
+    return '${months[d.month - 1]} ${d.day}, ${d.year}';
+  }
+}
+
+/// Row with Give Feedback (disabled if already submitted) and Comments.
+class _ActionsRow extends StatelessWidget {
+  const _ActionsRow({
+    required this.postId,
+    required this.currentUid,
+    required this.title,
+    required this.authorName,
+    required this.coverUrl,
+    required this.createdAt,
+    required this.description,
+  });
+
+  final String postId;
+  final String currentUid;
+  final String title;
+  final String authorName;
+  final String? coverUrl;
+  final dynamic createdAt;
+  final String description;
+
+  @override
+  Widget build(BuildContext context) {
+    final myFbDoc = FirebaseFirestore.instance
+        .collection('posts')
+        .doc(postId)
+        .collection('feedback')
+        .doc(currentUid);
+
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: myFbDoc.snapshots(),
+      builder: (context, snap) {
+        final alreadyLeft = (snap.data?.exists ?? false);
+
+        return Row(
+          children: [
+            TextButton(
+              onPressed: alreadyLeft
+                  ? null
+                  : () {
+                      Navigator.pushNamed(
+                        context,
+                        '/feedback',
+                        arguments: FeedbackScreenArgs(
+                          postId: postId,
+                          title: title,
+                          authorName: authorName,
+                          coverUrl: coverUrl,
+                          createdAt: createdAt,
+                        ),
+                      );
+                    },
+              style: TextButton.styleFrom(
+                padding: EdgeInsets.zero,
+                foregroundColor:
+                    alreadyLeft ? Colors.black45 : Colors.black,
+              ),
+              child: Text(
+                alreadyLeft ? 'Feedback sent' : 'Give Feedback',
+                style: TextStyle(
+                  decoration:
+                      alreadyLeft ? TextDecoration.none : TextDecoration.underline,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(width: 18),
+            TextButton(
+              onPressed: () {
+                Navigator.pushNamed(
+                  context,
+                  '/comments',
+                  arguments: CommentsArgs(
+                    postId: postId,
+                    title: title,
+                    authorName: authorName,
+                    coverUrl: coverUrl,
+                    description: description,
+                    createdAt: createdAt,
+                  ),
+                );
+              },
+              style: TextButton.styleFrom(
+                padding: EdgeInsets.zero,
+                foregroundColor: Colors.black,
+              ),
+              child: const Text(
+                'Comments',
+                style: TextStyle(
+                  decoration: TextDecoration.underline,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

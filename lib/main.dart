@@ -7,6 +7,14 @@ import 'screens/signup_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/upload_screen.dart';
 import 'screens/post_thanks_screen.dart';
+import 'screens/comment_detail_screen.dart';
+import 'screens/comments_screen.dart';
+import 'screens/design_view_screen.dart';
+import 'screens/feedback_screen.dart';
+import 'screens/feedback_thanks_screen.dart';
+import 'screens/profile_screen.dart';
+import 'screens/settings_screen.dart';
+
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -63,11 +71,18 @@ class DesignCritiqueApp extends StatelessWidget {
       theme: AppTheme.theme,
       initialRoute: '/login',
       routes: {
-        '/login': (_) => const LoginScreen(),
-        '/signup': (_) => const SignUpScreen(),
         '/home': (_) => const HomeScreen(),
         '/upload': (_) => const UploadScreen(),
+        '/profile': (_) => const ProfileScreen(),
+        '/settings': (_) => const SettingsScreen(),
+        '/comments': (_) => const CommentsScreen(),
+        '/commentDetail': (_) => const CommentDetailScreen(),
+        '/designView': (_) => const DesignViewScreen(),
+        '/feedback': (_) => const FeedbackScreen(),
+        '/feedbackThanks': (_) => const FeedbackThanksScreen(),
         '/postThanks': (_) => const PostThanksScreen(),
+        '/login': (_) => const LoginScreen(),
+        '/signup': (_) => const SignUpScreen(),
       },
     );
   }

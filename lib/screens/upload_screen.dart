@@ -1,4 +1,5 @@
-import 'dart:io';
+import 'dart:io' as io;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -18,7 +19,7 @@ class _UploadScreenState extends State<UploadScreen> {
 
   final _picker = ImagePicker();
   final List<XFile> _files = [];
-  final Map<String, double> _progress = {}; // filePath -> 0..1
+  final Map<String, double> _progress = {}; // file.path -> 0..1
   bool _submitting = false;
 
   @override
@@ -31,23 +32,21 @@ class _UploadScreenState extends State<UploadScreen> {
   void _showMsg(String text) {
     ScaffoldMessenger.of(context)
       ..clearSnackBars()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(text),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          margin: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-        ),
-      );
+      ..showSnackBar(SnackBar(
+        content: Text(text),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+      ));
   }
 
   Future<void> _pickImages() async {
+    // multi pick works on web + mobile
     final imgs = await _picker.pickMultiImage(imageQuality: 85, maxWidth: 2000);
     if (imgs.isNotEmpty) {
       setState(() {
-        // Cap to 3 for now (you can raise this)
-        final left = 3 - _files.length;
-        _files.addAll(imgs.take(left));
+        final left = 3 - _files.length; // cap to 3
+        if (left > 0) _files.addAll(imgs.take(left));
       });
     }
   }
@@ -72,7 +71,7 @@ class _UploadScreenState extends State<UploadScreen> {
     final db = FirebaseFirestore.instance;
     final storage = FirebaseStorage.instance;
     final uid = user.uid;
-    final postRef = db.collection('posts').doc(); // new id
+    final postRef = db.collection('posts').doc();
     final postId = postRef.id;
 
     // get author name from users/{uid}
@@ -82,25 +81,35 @@ class _UploadScreenState extends State<UploadScreen> {
     final List<String> imageUrls = [];
 
     try {
-      // Upload images sequentially (simpler progress UI)
       for (var i = 0; i < _files.length; i++) {
-        final f = _files[i];
-        final file = File(f.path);
+        final xf = _files[i];
         final fileName = 'img_${DateTime.now().millisecondsSinceEpoch}_$i.jpg';
-        final ref = storage.ref().child('user_uploads/$uid/$postId/$fileName');
-        final task = ref.putFile(file);
+        final ref = storage.ref('user_uploads/$uid/$postId/$fileName');
+
+        UploadTask task;
+
+        if (kIsWeb) {
+          final bytes = await xf.readAsBytes();
+          task = ref.putData(
+            bytes,
+            SettableMetadata(contentType: 'image/jpeg'),
+          );
+        } else {
+          final file = io.File(xf.path);
+          task = ref.putFile(file, SettableMetadata(contentType: 'image/jpeg'));
+        }
 
         task.snapshotEvents.listen((snap) {
-          final prog = snap.bytesTransferred / (snap.totalBytes == 0 ? 1 : snap.totalBytes);
-          setState(() => _progress[f.path] = prog.clamp(0, 1));
+          final prog = snap.bytesTransferred /
+              (snap.totalBytes == 0 ? 1 : snap.totalBytes);
+          setState(() => _progress[xf.path] = prog.clamp(0, 1));
         });
 
-        await task.whenComplete(() {});
-        final url = await ref.getDownloadURL();
+        final snap = await task.whenComplete(() {});
+        final url = await snap.ref.getDownloadURL();
         imageUrls.add(url);
       }
 
-      // Create Firestore post doc
       await postRef.set({
         'title': _title.text.trim(),
         'description': _desc.text.trim(),
@@ -130,7 +139,7 @@ class _UploadScreenState extends State<UploadScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final yellow = const Color(0xFFD9C63F);
+    const yellow = Color(0xFFD9C63F);
 
     return Scaffold(
       body: SafeArea(
@@ -150,7 +159,7 @@ class _UploadScreenState extends State<UploadScreen> {
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
                   ),
                 ),
-                const SizedBox(width: 48), // balance the leading icon space
+                const SizedBox(width: 48),
               ],
             ),
             const SizedBox(height: 8),
@@ -194,7 +203,6 @@ class _UploadScreenState extends State<UploadScreen> {
             const Text('Your design:', style: TextStyle(fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
 
-            // Upload drop area
             GestureDetector(
               onTap: _files.length >= 3 ? null : _pickImages,
               child: Container(
@@ -204,22 +212,21 @@ class _UploadScreenState extends State<UploadScreen> {
                   border: Border.all(color: Colors.black26, width: 1),
                   color: Colors.white,
                 ),
-                child: Center(
+                child: const Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(Icons.image_outlined, size: 44, color: yellow),
-                      const SizedBox(height: 8),
-                      const Text('Click to upload', style: TextStyle(fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 4),
-                      const Text('JPG, JPEG, PNG', style: TextStyle(color: Colors.black54)),
+                      SizedBox(height: 8),
+                      Text('Click to upload', style: TextStyle(fontWeight: FontWeight.w700)),
+                      SizedBox(height: 4),
+                      Text('JPG, JPEG, PNG', style: TextStyle(color: Colors.black54)),
                     ],
                   ),
                 ),
               ),
             ),
 
-            // Thumbnails / progress
             if (_files.isNotEmpty) ...[
               const SizedBox(height: 12),
               Container(
@@ -234,7 +241,8 @@ class _UploadScreenState extends State<UploadScreen> {
                   spacing: 10,
                   runSpacing: 10,
                   children: [
-                    for (final f in _files) _Thumb(path: f.path, progress: _progress[f.path]),
+                    for (final f in _files)
+                      _Thumb(path: f.path, xfile: f, progress: _progress[f.path]),
                     if (_files.length < 3)
                       _AddTile(onTap: _pickImages),
                   ],
@@ -244,7 +252,6 @@ class _UploadScreenState extends State<UploadScreen> {
 
             const SizedBox(height: 20),
 
-            // Buttons
             Row(
               children: [
                 Expanded(
@@ -281,8 +288,7 @@ class _UploadScreenState extends State<UploadScreen> {
                       foregroundColor: Colors.white,
                     ),
                     child: _submitting
-                        ? const SizedBox(
-                            height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                        ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
                         : const Text('SUBMIT'),
                   ),
                 ),
@@ -292,7 +298,6 @@ class _UploadScreenState extends State<UploadScreen> {
         ),
       ),
 
-      // Bottom nav (visual)
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
@@ -306,13 +311,9 @@ class _UploadScreenState extends State<UploadScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _NavItem(icon: Icons.home_rounded, label: 'Home', onTap: () {
-                  Navigator.pop(context);
-                }),
+                _NavItem(icon: Icons.home_rounded, label: 'Home', onTap: () => Navigator.pop(context)),
                 const _NavItem(icon: Icons.add_circle, label: 'Upload', active: true),
-                _NavItem(icon: Icons.person_rounded, label: 'Profile', onTap: () {
-                  // TODO: push to profile when you build it
-                }),
+                _NavItem(icon: Icons.person_rounded, label: 'Profile', onTap: () => Navigator.pushNamed(context, '/profile')),
               ],
             ),
           ),
@@ -323,35 +324,31 @@ class _UploadScreenState extends State<UploadScreen> {
 }
 
 class _Thumb extends StatelessWidget {
-  const _Thumb({required this.path, this.progress});
+  const _Thumb({required this.path, required this.xfile, this.progress});
   final String path;
+  final XFile xfile;
   final double? progress;
 
   @override
   Widget build(BuildContext context) {
+    Widget img;
+    if (kIsWeb) {
+      // On web path is a blob: URL; Image.network can render it.
+      img = Image.network(path, width: 90, height: 90, fit: BoxFit.cover);
+    } else {
+      img = Image.file(io.File(path), width: 90, height: 90, fit: BoxFit.cover);
+    }
+
     return Stack(
       children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(10),
-          child: Image.file(
-            File(path),
-            width: 90,
-            height: 90,
-            fit: BoxFit.cover,
-          ),
-        ),
+        ClipRRect(borderRadius: BorderRadius.circular(10), child: img),
         if (progress != null && progress! < 1.0)
           Positioned.fill(
             child: Container(
-              decoration: BoxDecoration(
-                color: Colors.black45,
-                borderRadius: BorderRadius.circular(10),
-              ),
+              decoration: BoxDecoration(color: Colors.black45, borderRadius: BorderRadius.circular(10)),
               child: Center(
-                child: Text(
-                  '${(progress! * 100).floor()}%',
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
-                ),
+                child: Text('${(progress! * 100).floor()}%',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
               ),
             ),
           ),
