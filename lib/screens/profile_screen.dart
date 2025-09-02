@@ -2,6 +2,38 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+// Update these imports to your actual file paths if needed.
+import '../screens/comments_screen.dart' show CommentsArgs;
+import '../screens/comment_detail_screen.dart' show CommentDetailArgs;
+
+/// ---------------- Helpers ----------------
+
+String _fmtDate(DateTime d) {
+  const months = [
+    'January','February','March','April','May','June',
+    'July','August','September','October','November','December'
+  ];
+  return '${months[d.month - 1]} ${d.day}, ${d.year}';
+}
+
+Widget stars(double? rating, {double size = 18}) {
+  final r = (rating ?? 0).clamp(0, 5).toDouble();
+  final full = r.floor();
+  final half = (r - full) >= 0.5 ? 1 : 0;
+  final empty = 5 - full - half;
+  Widget icon(IconData i) => Icon(i, size: size, color: Colors.amber);
+  return Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      for (var i = 0; i < full; i++) icon(Icons.star),
+      for (var i = 0; i < half; i++) icon(Icons.star_half),
+      for (var i = 0; i < empty; i++) icon(Icons.star_border),
+    ],
+  );
+}
+
+/// ---------------- Screen ----------------
+
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, this.onOpenSettings});
   final VoidCallback? onOpenSettings;
@@ -14,10 +46,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _auth = FirebaseAuth.instance;
   final _db = FirebaseFirestore.instance;
 
-  // Simple UI guard so server errors are visible (no more “shows then disappears”).
   Widget _guard<T>(AsyncSnapshot<T> snap, Widget Function() build) {
     if (snap.hasError) {
-      debugPrint('Firestore error: ${snap.error}');
       return Padding(
         padding: const EdgeInsets.only(top: 8),
         child: Text('Error: ${snap.error}', style: const TextStyle(color: Colors.red)),
@@ -37,16 +67,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final user = _auth.currentUser!;
     final uid = user.uid;
 
-    // User profile doc (optional, for display name / photo)
     final userDocStream = _db.collection('users').doc(uid).snapshots();
 
-    // Designs you posted
     final myPostsQ = _db
         .collection('posts')
         .where('authorId', isEqualTo: uid)
         .orderBy('createdAt', descending: true);
 
-    // Critiques you left (collection group). NOTE: field is reviewerId in your data.
     final myCritiquesQ = _db
         .collectionGroup('feedback')
         .where('reviewerId', isEqualTo: uid)
@@ -68,9 +95,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Header row: avatar, name, counts, gear
+                  // Header
                   Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       CircleAvatar(
                         radius: 26,
@@ -81,12 +107,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       Expanded(
                         child: Row(
                           children: [
-                            Text(
-                              displayName,
-                              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
-                            ),
+                            Text(displayName,
+                              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
                             const SizedBox(width: 12),
-                            // Live counts (designs + critiques)
                             StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                               stream: myPostsQ.snapshots(),
                               builder: (context, s1) {
@@ -108,21 +131,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                       IconButton(
                         icon: const Icon(Icons.settings_outlined),
-                        tooltip: 'Settings',
                         onPressed: widget.onOpenSettings ??
                             () => Navigator.of(context).pushNamed('/settings'),
                       ),
                     ],
                   ),
 
-                  const SizedBox(height: 24),
-                  const Text(
-                    'Your Designs',
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 20),
+                  const Text('Your Designs',
+                      style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 12),
 
-                  // Designs grid
+                  // DESIGNS GRID
                   StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                     stream: myPostsQ.snapshots(),
                     builder: (context, snap) => _guard(snap, () {
@@ -140,71 +160,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         itemCount: docs.length,
                         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: 2,
-                          mainAxisSpacing: 10,
-                          crossAxisSpacing: 10,
-                          childAspectRatio: 1,
+                          mainAxisSpacing: 18,
+                          crossAxisSpacing: 18,
+                          childAspectRatio: 0.72, // taller to avoid overflow
                         ),
                         itemBuilder: (_, i) {
-                          final d = docs[i].data();
+                          final doc = docs[i];
+                          final d = doc.data();
 
-                          // Your posts store 'coverUrl'; add sensible fallbacks.
-                          final thumb = d['coverUrl'] ??
+                          final cover = d['coverUrl'] ??
                               d['thumbnailUrl'] ??
                               d['imageUrl'] ??
                               ((d['images'] is List && (d['images'] as List).isNotEmpty)
                                   ? (d['images'] as List).first
                                   : null);
 
-                          final title = (d['title'] ?? '').toString().trim().isEmpty
-                              ? 'Untitled'
-                              : d['title'];
+                          final title = (d['title'] ?? 'Untitled').toString();
+                          final authorName = (d['authorName'] ?? '').toString();
+                          final ts = d['createdAt'] as Timestamp?;
+                          final created = ts?.toDate();
 
-                          return ClipRRect(
-                            borderRadius: BorderRadius.circular(14),
-                            child: Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                thumb != null
-                                    ? Image.network(thumb, fit: BoxFit.cover)
-                                    : Container(
-                                        color: Colors.black12,
-                                        alignment: Alignment.center,
-                                        child: const Text('No image'),
-                                      ),
-                                Positioned(
-                                  left: 8,
-                                  right: 8,
-                                  bottom: 8,
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: Colors.black.withOpacity(0.45),
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: Text(
-                                      title,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(color: Colors.white, fontSize: 12),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
+                          return _DesignCard(
+                            postId: doc.id,
+                            coverUrl: cover,
+                            title: title,
+                            authorName: authorName,
+                            createdAtText: created != null ? _fmtDate(created) : '--',
                           );
                         },
                       );
                     }),
                   ),
 
-                  const SizedBox(height: 24),
-                  const Text(
-                    'Your Critiques',
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
-                  ),
+                  const SizedBox(height: 26),
+                  const Text('Your Critiques',
+                      style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800)),
                   const SizedBox(height: 8),
 
-                  // Critiques list
+                  // CRITIQUES LIST
                   StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                     stream: myCritiquesQ.snapshots(),
                     builder: (context, snap) => _guard(snap, () {
@@ -220,38 +213,50 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
                         itemCount: docs.length,
-                        separatorBuilder: (_, __) => const Divider(height: 16),
+                        separatorBuilder: (_, __) => const Divider(height: 24),
                         itemBuilder: (_, i) {
-                          final doc = docs[i];
-                          final data = doc.data();
+                          final fbDoc = docs[i];
+                          final data = fbDoc.data();
+                          final avg = (data['avg'] as num?)?.toDouble();
+                          final comment = (data['comment'] ??
+                                  (data['notes'] is Map ? (data['notes']['overall'] ?? '') : ''))
+                              .toString();
+                          final ts = data['createdAt'] as Timestamp?;
+                          final date = ts != null ? _fmtDate(ts.toDate()) : '--';
 
-                          // You have avg (num) and notes/rating maps; use a sensible summary.
-                          final avg = data['avg'];
-                          final comment = data['comment'] ??
-                              (data['notes'] is Map ? (data['notes']['overall'] ?? '') : '') ??
-                              '';
-                          final commentText = (comment is String && comment.trim().isNotEmpty)
-                              ? comment
-                              : '(no text)';
+                          final postRef = fbDoc.reference.parent.parent!;
+                          return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                            future: postRef.get(),
+                            builder: (context, ps) {
+                              final post = ps.data?.data();
+                              final postTitle = (post?['title'] ?? 'Design').toString();
+                              final thumb = post?['coverUrl'] ??
+                                  post?['thumbnailUrl'] ??
+                                  post?['imageUrl'] ??
+                                  ((post?['images'] is List &&
+                                          (post?['images'] as List).isNotEmpty)
+                                      ? (post!['images'] as List).first
+                                      : null);
 
-                          // parent post id
-                          final postId = doc.reference.parent.parent?.id ?? 'unknown';
-
-                          return ListTile(
-                            leading: Container(
-                              width: 36,
-                              height: 36,
-                              decoration: BoxDecoration(
-                                color: accent.withOpacity(.2),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              alignment: Alignment.center,
-                              child: const Icon(Icons.mode_comment_outlined),
-                            ),
-                            title: Text(commentText),
-                            subtitle: Text(
-                              'On post: $postId${avg != null ? " • Avg: $avg" : ""}',
-                            ),
+                              return _CritiqueCard(
+                                thumbnailUrl: thumb,
+                                title: postTitle,
+                                dateText: date,
+                                rating: avg,
+                                commentPreview: comment.isEmpty ? '(no text)' : comment,
+                                onTap: () {
+                                  // feedback doc id == reviewer uid
+                                  final reviewerUid = fbDoc.id;
+                                  Navigator.of(context).pushNamed(
+                                    '/commentDetail',
+                                    arguments: CommentDetailArgs(
+                                      postId: postRef.id,
+                                      uid: reviewerUid,
+                                    ),
+                                  );
+                                },
+                              );
+                            },
                           );
                         },
                       );
@@ -268,7 +273,184 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
-// ---- Bottom nav (placeholder) ----
+/// ---------------- Cards ----------------
+
+class _DesignCard extends StatelessWidget {
+  const _DesignCard({
+    required this.postId,
+    required this.coverUrl,
+    required this.title,
+    required this.authorName,
+    required this.createdAtText,
+  });
+
+  final String postId;
+  final String? coverUrl;
+  final String title;
+  final String authorName;
+  final String createdAtText;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(22),
+      onTap: () {
+        // EXACTLY like Home: pass the same args shape
+        Navigator.of(context).pushNamed(
+          '/comments',
+          arguments: CommentsArgs(
+            postId: postId,
+            title: title,
+            authorName: authorName,
+            // If Home uses a different name for the image param,
+            // change this to that exact name (e.g. thumbUrl: / imageUrl:).
+            coverUrl: coverUrl,
+          ),
+        );
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(22),
+          boxShadow: const [
+            BoxShadow(color: Colors.black12, blurRadius: 16, offset: Offset(0, 6)),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ClipRRect(
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(22),
+                topRight: Radius.circular(22),
+              ),
+              child: AspectRatio(
+                aspectRatio: 1.10,
+                child: coverUrl != null
+                    ? Image.network(coverUrl!, fit: BoxFit.cover)
+                    : Container(color: Colors.black12),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.45),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+              child: Row(
+                children: [
+                  const Icon(Icons.calendar_today, size: 16, color: Colors.black54),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      createdAtText,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Colors.black54),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CritiqueCard extends StatelessWidget {
+  const _CritiqueCard({
+    required this.thumbnailUrl,
+    required this.title,
+    required this.dateText,
+    required this.rating,
+    required this.commentPreview,
+    required this.onTap,
+  });
+
+  final String? thumbnailUrl;
+  final String title;
+  final String dateText;
+  final double? rating;
+  final String commentPreview;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              width: 60,
+              height: 60,
+              color: Colors.black12,
+              child: thumbnailUrl != null
+                  ? Image.network(thumbnailUrl!, fit: BoxFit.cover)
+                  : const Icon(Icons.image, size: 22),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(dateText, style: const TextStyle(color: Colors.black54, fontSize: 12)),
+                    const SizedBox(width: 8),
+                    stars(rating, size: 16),
+                    const SizedBox(width: 4),
+                    Text(
+                      rating != null ? rating!.toStringAsFixed(1) : '—',
+                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(commentPreview, maxLines: 2, overflow: TextOverflow.ellipsis),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(onPressed: onTap, child: const Text('View full feedback')),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---- Bottom nav (wired like other screens)
 class _NavBar extends StatelessWidget {
   final int current;
   final Color accent;
@@ -276,6 +458,16 @@ class _NavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Color colorFor(bool sel) => sel ? accent : Colors.black87;
+
+    void go(int idx) {
+      if (idx == current) return; // already here
+      final route = idx == 0 ? '/home' : idx == 1 ? '/upload' : '/profile';
+      Navigator.of(context).pushReplacementNamed(route);
+      // If the rest of your app uses a different navigation style,
+      // e.g. pushNamedAndRemoveUntil, swap the line above accordingly.
+    }
+
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
@@ -286,9 +478,24 @@ class _NavBar extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          _NavBtn(icon: Icons.home_rounded, label: 'Home', selected: current == 0, onTap: () {}),
-          _NavBtn(icon: Icons.add_circle, label: 'Upload', selected: current == 1, onTap: () {}),
-          _NavBtn(icon: Icons.person_rounded, label: 'Profile', selected: current == 2, onTap: () {}, selectedColor: accent),
+          _NavBtn(
+            icon: Icons.home_rounded,
+            label: 'Home',
+            color: colorFor(current == 0),
+            onTap: () => go(0),
+          ),
+          _NavBtn(
+            icon: Icons.add_circle,
+            label: 'Upload',
+            color: colorFor(current == 1),
+            onTap: () => go(1),
+          ),
+          _NavBtn(
+            icon: Icons.person_rounded,
+            label: 'Profile',
+            color: colorFor(current == 2),
+            onTap: () => go(2),
+          ),
         ],
       ),
     );
@@ -298,21 +505,18 @@ class _NavBar extends StatelessWidget {
 class _NavBtn extends StatelessWidget {
   final IconData icon;
   final String label;
-  final bool selected;
+  final Color color;
   final VoidCallback onTap;
-  final Color? selectedColor;
 
   const _NavBtn({
     required this.icon,
     required this.label,
-    required this.selected,
+    required this.color,
     required this.onTap,
-    this.selectedColor,
   });
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? (selectedColor ?? Theme.of(context).colorScheme.primary) : Colors.black87;
     return InkWell(
       borderRadius: BorderRadius.circular(16),
       onTap: onTap,
