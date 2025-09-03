@@ -2,18 +2,17 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-// Update these imports to your actual file paths if needed.
 import '../screens/comments_screen.dart' show CommentsArgs;
 import '../screens/comment_detail_screen.dart' show CommentDetailArgs;
 
-/// ---------------- Helpers ----------------
+/// ------------- Helpers -------------
 
 String _fmtDate(DateTime d) {
-  const months = [
+  const m = [
     'January','February','March','April','May','June',
     'July','August','September','October','November','December'
   ];
-  return '${months[d.month - 1]} ${d.day}, ${d.year}';
+  return '${m[d.month - 1]} ${d.day}, ${d.year}';
 }
 
 Widget stars(double? rating, {double size = 18}) {
@@ -32,7 +31,7 @@ Widget stars(double? rating, {double size = 18}) {
   );
 }
 
-/// ---------------- Screen ----------------
+/// ------------- Screen -------------
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, this.onOpenSettings});
@@ -108,7 +107,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         child: Row(
                           children: [
                             Text(displayName,
-                              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
+                                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
                             const SizedBox(width: 12),
                             StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                               stream: myPostsQ.snapshots(),
@@ -142,54 +141,67 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800)),
                   const SizedBox(height: 12),
 
-                  // DESIGNS GRID
-                  StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                    stream: myPostsQ.snapshots(),
-                    builder: (context, snap) => _guard(snap, () {
-                      final docs = snap.data?.docs ?? const [];
-                      if (docs.isEmpty) {
-                        return const Padding(
-                          padding: EdgeInsets.only(top: 6),
-                          child: Text("You didn’t post any designs yet."),
-                        );
-                      }
+                  // DESIGNS GRID (responsive)
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final w = constraints.maxWidth;
+                      // keep 2 columns for phones
+                      const crossAxisCount = 2;
 
-                      return GridView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: docs.length,
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          mainAxisSpacing: 18,
-                          crossAxisSpacing: 18,
-                          childAspectRatio: 0.72, // taller to avoid overflow
-                        ),
-                        itemBuilder: (_, i) {
-                          final doc = docs[i];
-                          final d = doc.data();
+                      // Make cards taller on narrow screens to prevent overflow
+                      final ratio = w < 360
+                          ? 0.56
+                          : (w < 420 ? 0.62 : (w < 520 ? 0.70 : 0.80));
 
-                          final cover = d['coverUrl'] ??
-                              d['thumbnailUrl'] ??
-                              d['imageUrl'] ??
-                              ((d['images'] is List && (d['images'] as List).isNotEmpty)
-                                  ? (d['images'] as List).first
-                                  : null);
+                      return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                        stream: myPostsQ.snapshots(),
+                        builder: (context, snap) => _guard(snap, () {
+                          final docs = snap.data?.docs ?? const [];
+                          if (docs.isEmpty) {
+                            return const Padding(
+                              padding: EdgeInsets.only(top: 6),
+                              child: Text("You didn’t post any designs yet."),
+                            );
+                          }
 
-                          final title = (d['title'] ?? 'Untitled').toString();
-                          final authorName = (d['authorName'] ?? '').toString();
-                          final ts = d['createdAt'] as Timestamp?;
-                          final created = ts?.toDate();
+                          return GridView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: docs.length,
+                            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: crossAxisCount,
+                              mainAxisSpacing: 18,
+                              crossAxisSpacing: 18,
+                              childAspectRatio: ratio,
+                            ),
+                            itemBuilder: (_, i) {
+                              final doc = docs[i];
+                              final d = doc.data();
 
-                          return _DesignCard(
-                            postId: doc.id,
-                            coverUrl: cover,
-                            title: title,
-                            authorName: authorName,
-                            createdAtText: created != null ? _fmtDate(created) : '--',
+                              final cover = d['coverUrl'] ??
+                                  d['thumbnailUrl'] ??
+                                  d['imageUrl'] ??
+                                  ((d['images'] is List && (d['images'] as List).isNotEmpty)
+                                      ? (d['images'] as List).first
+                                      : null);
+
+                              final title = (d['title'] ?? 'Untitled').toString();
+                              final authorName = (d['authorName'] ?? '').toString();
+                              final ts = d['createdAt'] as Timestamp?;
+                              final created = ts?.toDate();
+
+                              return _DesignCard(
+                                postId: doc.id,
+                                coverUrl: cover,
+                                title: title,
+                                authorName: authorName,
+                                createdAtText: created != null ? _fmtDate(created) : '--',
+                              );
+                            },
                           );
-                        },
+                        }),
                       );
-                    }),
+                    },
                   ),
 
                   const SizedBox(height: 26),
@@ -245,7 +257,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 rating: avg,
                                 commentPreview: comment.isEmpty ? '(no text)' : comment,
                                 onTap: () {
-                                  // feedback doc id == reviewer uid
                                   final reviewerUid = fbDoc.id;
                                   Navigator.of(context).pushNamed(
                                     '/commentDetail',
@@ -273,7 +284,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
-/// ---------------- Cards ----------------
+/// ------------- Cards -------------
 
 class _DesignCard extends StatelessWidget {
   const _DesignCard({
@@ -292,84 +303,139 @@ class _DesignCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(22),
-      onTap: () {
-        // EXACTLY like Home: pass the same args shape
-        Navigator.of(context).pushNamed(
-          '/comments',
-          arguments: CommentsArgs(
-            postId: postId,
-            title: title,
-            authorName: authorName,
-            // If Home uses a different name for the image param,
-            // change this to that exact name (e.g. thumbUrl: / imageUrl:).
-            coverUrl: coverUrl,
+    final feedbackStream = FirebaseFirestore.instance
+        .collection('posts')
+        .doc(postId)
+        .collection('feedback')
+        .snapshots();
+
+    final screenW = MediaQuery.of(context).size.width;
+    // ↓ change #1: slightly smaller stars on narrow phones
+    final starSize = screenW < 360 ? 12.0 : (screenW < 420 ? 13.0 : 15.0);
+
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: feedbackStream,
+      builder: (context, snap) {
+        double? avg;
+        int commentsCount = 0;
+
+        if (snap.hasData) {
+          final docs = snap.data!.docs;
+          commentsCount = docs.length;
+          final values = docs
+              .map((d) => (d.data()['avg'] as num?)?.toDouble())
+              .whereType<double>()
+              .toList();
+          if (values.isNotEmpty) {
+            avg = values.reduce((a, b) => a + b) / values.length;
+          }
+        }
+
+        return InkWell(
+          borderRadius: BorderRadius.circular(22),
+          onTap: () {
+            Navigator.of(context).pushNamed(
+              '/comments',
+              arguments: CommentsArgs(
+                postId: postId,
+                title: title,
+                authorName: authorName,
+                coverUrl: coverUrl,
+              ),
+            );
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(22),
+              boxShadow: const [
+                BoxShadow(color: Colors.black12, blurRadius: 16, offset: Offset(0, 6)),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Flexible image so text rows always fit
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(22),
+                      topRight: Radius.circular(22),
+                    ),
+                    child: coverUrl != null
+                        ? Image.network(coverUrl!, fit: BoxFit.cover)
+                        : Container(color: Colors.black12),
+                  ),
+                ),
+
+                // Title pill
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.45),
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+
+                // ↓ change #2: tighter stars + rating + comments row
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 6, 12, 4),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Row(
+                          children: [
+                            Flexible(child: stars(avg, size: starSize)),
+                            const SizedBox(width: 4),
+                            Text(
+                              avg != null ? avg.toStringAsFixed(1) : '—',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w600, fontSize: 12),
+                              overflow: TextOverflow.fade,
+                              softWrap: false,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      const Icon(Icons.chat_bubble_outline, size: 14),
+                      const SizedBox(width: 3),
+                      Text(
+                        commentsCount.toString(),
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w600, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Date (icon removed to save space)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                  child: Text(
+                    createdAtText,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.black54),
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       },
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(22),
-          boxShadow: const [
-            BoxShadow(color: Colors.black12, blurRadius: 16, offset: Offset(0, 6)),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            ClipRRect(
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(22),
-                topRight: Radius.circular(22),
-              ),
-              child: AspectRatio(
-                aspectRatio: 1.10,
-                child: coverUrl != null
-                    ? Image.network(coverUrl!, fit: BoxFit.cover)
-                    : Container(color: Colors.black12),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.45),
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-              child: Row(
-                children: [
-                  const Icon(Icons.calendar_today, size: 16, color: Colors.black54),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      createdAtText,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: Colors.black54),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -450,7 +516,7 @@ class _CritiqueCard extends StatelessWidget {
   }
 }
 
-// ---- Bottom nav (wired like other screens)
+/// ---- Bottom nav (same behavior as other screens)
 class _NavBar extends StatelessWidget {
   final int current;
   final Color accent;
@@ -461,11 +527,9 @@ class _NavBar extends StatelessWidget {
     Color colorFor(bool sel) => sel ? accent : Colors.black87;
 
     void go(int idx) {
-      if (idx == current) return; // already here
+      if (idx == current) return;
       final route = idx == 0 ? '/home' : idx == 1 ? '/upload' : '/profile';
       Navigator.of(context).pushReplacementNamed(route);
-      // If the rest of your app uses a different navigation style,
-      // e.g. pushNamedAndRemoveUntil, swap the line above accordingly.
     }
 
     return Container(
@@ -478,24 +542,9 @@ class _NavBar extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          _NavBtn(
-            icon: Icons.home_rounded,
-            label: 'Home',
-            color: colorFor(current == 0),
-            onTap: () => go(0),
-          ),
-          _NavBtn(
-            icon: Icons.add_circle,
-            label: 'Upload',
-            color: colorFor(current == 1),
-            onTap: () => go(1),
-          ),
-          _NavBtn(
-            icon: Icons.person_rounded,
-            label: 'Profile',
-            color: colorFor(current == 2),
-            onTap: () => go(2),
-          ),
+          _NavBtn(icon: Icons.home_rounded,  label: 'Home',   color: colorFor(current == 0), onTap: () => go(0)),
+          _NavBtn(icon: Icons.add_circle,    label: 'Upload', color: colorFor(current == 1), onTap: () => go(1)),
+          _NavBtn(icon: Icons.person_rounded,label: 'Profile',color: colorFor(current == 2), onTap: () => go(2)),
         ],
       ),
     );
