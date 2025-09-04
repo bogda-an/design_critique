@@ -14,18 +14,19 @@ class CommentDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final a = ModalRoute.of(context)!.settings.arguments as CommentDetailArgs;
+    final args =
+        ModalRoute.of(context)!.settings.arguments as CommentDetailArgs;
 
-    final fbDoc = FirebaseFirestore.instance
+    final ref = FirebaseFirestore.instance
         .collection('posts')
-        .doc(a.postId)
+        .doc(args.postId)
         .collection('feedback')
-        .doc(a.uid);
+        .doc(args.uid);
 
     return Scaffold(
       body: SafeArea(
-        child: FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-          future: fbDoc.get(),
+        child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+          stream: ref.snapshots(),
           builder: (context, snap) {
             if (snap.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
@@ -36,6 +37,7 @@ class CommentDetailScreen extends StatelessWidget {
 
             final m = snap.data!.data()!;
             final name = (m['reviewerName'] as String?) ?? 'Anonymous';
+            final photoUrl = (m['reviewerPhotoUrl'] as String?) ?? '';
             final createdAt = m['createdAt'];
             final ratings = (m['ratings'] as Map?) ?? {};
             final notes = (m['notes'] as Map?) ?? {};
@@ -69,8 +71,13 @@ class CommentDetailScreen extends StatelessWidget {
                   children: [
                     CircleAvatar(
                       radius: 18,
+                      backgroundImage: photoUrl.isNotEmpty
+                          ? NetworkImage(photoUrl)
+                          : null,
                       backgroundColor: Colors.grey.shade200,
-                      child: Icon(Icons.person, color: Colors.grey.shade700),
+                      child: photoUrl.isEmpty
+                          ? Icon(Icons.person, color: Colors.grey.shade700)
+                          : null,
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -87,14 +94,11 @@ class CommentDetailScreen extends StatelessWidget {
                         ],
                       ),
                     ),
-                    Row(
-                      children: [
-                        _Stars(value: r('overall')),
-                        const SizedBox(width: 6),
-                        Text(r('overall').toStringAsFixed(1),
-                            style: const TextStyle(color: Colors.black54)),
-                      ],
-                    )
+                    const SizedBox(width: 6),
+                    _Stars(value: r('overall')),
+                    const SizedBox(width: 6),
+                    Text(r('overall').toStringAsFixed(1),
+                        style: const TextStyle(color: Colors.black54)),
                   ],
                 ),
 
@@ -102,8 +106,7 @@ class CommentDetailScreen extends StatelessWidget {
 
                 _SectionView(
                   title: 'Visual Appeal',
-                  question:
-                      'How attractive and polished does this design look?',
+                  question: 'How attractive and polished does this design look?',
                   value: r('visual'),
                   note: (notes['visual'] as String?) ?? '',
                 ),
@@ -122,16 +125,14 @@ class CommentDetailScreen extends StatelessWidget {
                   note: (notes['usability'] as String?) ?? '',
                 ),
                 _SectionView(
-                  title: 'Clarity & Structure',
-                  question:
-                      'Are information and actions clear and well-organized?',
+                  title: 'Clarity',
+                  question: 'Is the content clear and easy to understand?',
                   value: r('clarity'),
                   note: (notes['clarity'] as String?) ?? '',
                 ),
                 _SectionView(
-                  title: 'Overall Experience',
-                  question:
-                      'Your gut-level rating of the design as a whole.',
+                  title: 'Overall',
+                  question: 'Overall, how would you rate this design?',
                   value: r('overall'),
                   note: (notes['overall'] as String?) ?? '',
                 ),
@@ -140,29 +141,24 @@ class CommentDetailScreen extends StatelessWidget {
           },
         ),
       ),
-
-      // ✅ unified bottom nav
       bottomNavigationBar: const AppBottomNav(current: BottomTab.home),
     );
   }
+}
 
-  DateTime? _toDate(dynamic ts) {
-    try {
-      if (ts == null) return null;
-      if (ts is DateTime) return ts;
-      if (ts is Timestamp) return ts.toDate();
-    } catch (_) {}
+DateTime? _toDate(dynamic v) {
+  if (v == null) return null;
+  if (v is DateTime) return v;
+  try {
+    return (v as Timestamp).toDate();
+  } catch (_) {
     return null;
   }
+}
 
-  String? _formatDate(DateTime? d) {
-    if (d == null) return null;
-    const months = [
-      'January','February','March','April','May','June',
-      'July','August','September','October','November','December'
-    ];
-    return '${months[d.month - 1]} ${d.day}, ${d.year}';
-  }
+String? _formatDate(DateTime? d) {
+  if (d == null) return null;
+  return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 }
 
 class _SectionView extends StatelessWidget {
@@ -180,36 +176,31 @@ class _SectionView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title,
-              style:
-                  const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-          const SizedBox(height: 4),
-          Text(question, style: const TextStyle(color: Colors.black54)),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              _Stars(value: value),
-              const SizedBox(width: 6),
-              Text(value.toStringAsFixed(1),
-                  style: const TextStyle(color: Colors.black54)),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Material(
-            elevation: 2,
-            shadowColor: Colors.black12,
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-              child: Text(note.isEmpty ? '—' : note),
+    return Material(
+      color: Colors.white,
+      elevation: 0.5,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title,
+                style: const TextStyle(
+                    fontWeight: FontWeight.w800, fontSize: 16)),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                _Stars(value: value),
+                const SizedBox(width: 6),
+                Text(value.toStringAsFixed(1),
+                    style: const TextStyle(color: Colors.black54)),
+              ],
             ),
-          ),
-        ],
+            const SizedBox(height: 6),
+            Text(note.isEmpty ? '—' : note),
+          ],
+        ),
       ),
     );
   }

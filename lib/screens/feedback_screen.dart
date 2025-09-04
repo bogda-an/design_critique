@@ -3,35 +3,40 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../widgets/app_bottom_nav.dart';
+import 'design_view_screen.dart';
 
+/// Arguments for FeedbackScreen
 class FeedbackScreenArgs {
   final String postId;
   final String title;
   final String authorName;
-  final String? coverUrl;
-  final dynamic createdAt;
+  final String? authorPhotoUrl; // optional avatar
+  final String? coverUrl;       // post image
+  final String? description;    // short description
+  final dynamic createdAt;      // Timestamp/DateTime optional
 
   FeedbackScreenArgs({
     required this.postId,
     required this.title,
     required this.authorName,
+    this.authorPhotoUrl,
     this.coverUrl,
+    this.description,
     this.createdAt,
   });
 }
 
 class FeedbackScreen extends StatefulWidget {
   const FeedbackScreen({super.key});
-
   @override
   State<FeedbackScreen> createState() => _FeedbackScreenState();
 }
 
 class _FeedbackScreenState extends State<FeedbackScreen> {
-  // ratings
+  // Ratings (tap stars 0–5)
   double visual = 0, accessibility = 0, usability = 0, clarity = 0, overall = 0;
 
-  // notes
+  // Notes
   final visualC = TextEditingController();
   final accessibilityC = TextEditingController();
   final usabilityC = TextEditingController();
@@ -50,19 +55,18 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
     super.dispose();
   }
 
-  void _show(String msg) {
-    ScaffoldMessenger.of(context)
-      ..clearSnackBars()
-      ..showSnackBar(SnackBar(content: Text(msg)));
-  }
+  void _show(String msg) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
 
-  Future<void> _submit(FeedbackScreenArgs a) async {
-    final u = FirebaseAuth.instance.currentUser;
-    if (u == null) {
-      _show('Please log in first.');
-      return;
-    }
-    if (overall == 0) {
+  double _avg(List<double> v) =>
+      v.isEmpty ? 0 : v.reduce((a, b) => a + b) / v.length;
+
+  Future<void> _submit() async {
+    final args =
+        ModalRoute.of(context)!.settings.arguments as FeedbackScreenArgs;
+    final user = FirebaseAuth.instance.currentUser!;
+
+    if (overall <= 0) {
       _show('Please set an overall rating.');
       return;
     }
@@ -72,11 +76,11 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
     try {
       final doc = FirebaseFirestore.instance
           .collection('posts')
-          .doc(a.postId)
+          .doc(args.postId)
           .collection('feedback')
-          .doc(u.uid);
+          .doc(user.uid);
 
-      // If it exists, block here too (UI also disables, and rules enforce)
+      // Prevent duplicate feedback
       final exists = (await doc.get()).exists;
       if (exists) {
         setState(() => submitting = false);
@@ -84,9 +88,30 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
         return;
       }
 
+      // Reviewer name + photo (profile → auth → fallback)
+      final profileSnap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+      final profile = profileSnap.data() ?? {};
+
+      final nameFromUsername = (profile['username'] as String?) ?? '';
+      final nameFromName = (profile['name'] as String?) ?? '';
+      final nameFromAuth = user.displayName ?? '';
+
+      final reviewerName = nameFromUsername.isNotEmpty
+          ? nameFromUsername
+          : (nameFromName.isNotEmpty
+              ? nameFromName
+              : (nameFromAuth.isNotEmpty ? nameFromAuth : 'Anonymous'));
+
+      final reviewerPhotoUrl =
+          (profile['photoUrl'] as String?) ?? (user.photoURL ?? '');
+
       await doc.set({
-        'reviewerId': u.uid,
-        'reviewerName': u.displayName ?? 'Anonymous',
+        'reviewerId': user.uid,
+        'reviewerName': reviewerName,
+        'reviewerPhotoUrl': reviewerPhotoUrl,
         'createdAt': FieldValue.serverTimestamp(),
         'ratings': {
           'visual': visual,
@@ -109,7 +134,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
       Navigator.pushReplacementNamed(context, '/feedbackThanks');
     } catch (e) {
       setState(() => submitting = false);
-      _show('Failed to submit. Please try again.');
+      _show('Failed to submit feedback. Please try again.');
     }
   }
 
@@ -117,208 +142,402 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
   Widget build(BuildContext context) {
     final a = ModalRoute.of(context)!.settings.arguments as FeedbackScreenArgs;
 
+    final fbRef = FirebaseFirestore.instance
+        .collection('posts')
+        .doc(a.postId)
+        .collection('feedback')
+        .orderBy('createdAt', descending: true);
+
+    final me = FirebaseAuth.instance.currentUser!;
     final myDoc = FirebaseFirestore.instance
         .collection('posts')
         .doc(a.postId)
         .collection('feedback')
-        .doc(FirebaseAuth.instance.currentUser?.uid ?? '_');
+        .doc(me.uid);
 
     return Scaffold(
       body: SafeArea(
-        child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-          stream: myDoc.snapshots(),
+        child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: fbRef.snapshots(),
           builder: (context, snap) {
-            final alreadyLeft = snap.data?.exists ?? false;
+            final docs = snap.data?.docs ?? const [];
+            final count = docs.length;
+            var sum = 0.0;
+            for (final d in docs) {
+              final m = d.data();
+              final ratings = (m['ratings'] as Map?) ?? {};
+              final o = ratings['overall'];
+              if (o is num) sum += o.toDouble();
+            }
+            final avg = count == 0 ? 0.0 : sum / count;
 
-            return ListView(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-              children: [
-                Row(
+            return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+              stream: myDoc.snapshots(),
+              builder: (context, mySnap) {
+                final alreadyLeft = mySnap.data?.exists ?? false;
+
+                return ListView(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
                   children: [
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back),
-                      onPressed: () => Navigator.pop(context),
+                    // Back header
+                    Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.arrow_back),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                        const Expanded(
+                          child: Text(
+                            'Back to home',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                        const SizedBox(width: 48),
+                      ],
                     ),
-                    const Expanded(
-                      child: Text(
-                        'Back to home',
-                        textAlign: TextAlign.center,
-                        style:
-                            TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+
+                    // Author row (avatar, date, avg, count)
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 16,
+                          backgroundImage: (a.authorPhotoUrl?.isNotEmpty ?? false)
+                              ? NetworkImage(a.authorPhotoUrl!)
+                              : null,
+                          child: (a.authorPhotoUrl?.isEmpty ?? true)
+                              ? const Icon(Icons.person, size: 18)
+                              : null,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(a.authorName,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w700)),
+                              if (_formatDate(_toDate(a.createdAt)) != null)
+                                Text(_formatDate(_toDate(a.createdAt))!,
+                                    style: const TextStyle(
+                                        color: Colors.black54, fontSize: 12)),
+                            ],
+                          ),
+                        ),
+                        _Stars(value: avg),
+                        const SizedBox(width: 4),
+                        Text(avg.toStringAsFixed(1),
+                            style:
+                                const TextStyle(color: Colors.black54)),
+                        const SizedBox(width: 8),
+                        Row(
+                          children: [
+                            const Icon(Icons.chat_bubble_outline, size: 16),
+                            const SizedBox(width: 2),
+                            Text('$count',
+                                style: const TextStyle(color: Colors.black54)),
+                          ],
+                        )
+                      ],
+                    ),
+
+                    const SizedBox(height: 10),
+
+                    // Media + title + description + "Press to view design"
+                    Material(
+                      elevation: 1,
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Image
+                            InkWell(
+                              onTap: (a.coverUrl?.isNotEmpty ?? false)
+                                  ? () {
+                                      Navigator.pushNamed(
+                                        context,
+                                        '/designView',
+                                        arguments: DesignViewArgs(
+                                          imageUrl: a.coverUrl!,
+                                          postId: a.postId,
+                                        ),
+                                      );
+                                    }
+                                  : null,
+                              child: Hero(
+                                tag: 'designImage-${a.postId}',
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Container(
+                                    width: 92,
+                                    height: 92,
+                                    color: Colors.grey.shade200,
+                                    child: (a.coverUrl?.isNotEmpty ?? false)
+                                        ? Image.network(
+                                            a.coverUrl!,
+                                            fit: BoxFit.cover,
+                                          )
+                                        : const Icon(Icons.image, size: 28),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            // Title / description / CTA
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(a.title,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w800)),
+                                  const SizedBox(height: 4),
+                                  if ((a.description?.isNotEmpty ?? false))
+                                    Text(
+                                      a.description!,
+                                      maxLines: 3,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                          color: Colors.black87),
+                                    ),
+                                  const SizedBox(height: 4),
+                                  TextButton(
+                                    onPressed: (a.coverUrl?.isNotEmpty ?? false)
+                                        ? () {
+                                            Navigator.pushNamed(
+                                              context,
+                                              '/designView',
+                                              arguments: DesignViewArgs(
+                                                imageUrl: a.coverUrl!,
+                                                postId: a.postId,
+                                              ),
+                                            );
+                                          }
+                                        : null,
+                                    child: const Text('Press to view design'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                    const SizedBox(width: 48),
+
+                    const SizedBox(height: 16),
+
+                    // Sections (stars + textfield)
+                    _Section(
+                      title: 'Visual Appeal',
+                      question:
+                          'How attractive and polished does this design look?',
+                      value: visual,
+                      onChanged: (v) => setState(() => visual = v),
+                      controller: visualC,
+                    ),
+                    _Section(
+                      title: 'Accessibility',
+                      question:
+                          'Can people of all abilities use this comfortably?',
+                      value: accessibility,
+                      onChanged: (v) => setState(() => accessibility = v),
+                      controller: accessibilityC,
+                    ),
+                    _Section(
+                      title: 'Usability',
+                      question:
+                          'Is it straightforward to navigate and accomplish tasks?',
+                      value: usability,
+                      onChanged: (v) => setState(() => usability = v),
+                      controller: usabilityC,
+                    ),
+                    _Section(
+                      title: 'Clarity & Structure',
+                      question:
+                          'Are information and actions clear and well-organized?',
+                      value: clarity,
+                      onChanged: (v) => setState(() => clarity = v),
+                      controller: clarityC,
+                    ),
+                    _Section(
+                      title: 'Overall Experience',
+                      question:
+                          'Your gut-level rating of the design as a whole.',
+                      value: overall,
+                      onChanged: (v) => setState(() => overall = v),
+                      controller: overallC,
+                    ),
+
+                    const SizedBox(height: 10),
+
+                    // Cancel / Submit
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: submitting ? null : () {
+                              Navigator.pop(context);
+                            },
+                            child: const Text('CANCEL'),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: submitting || alreadyLeft ? null : _submit,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFD9C63F),
+                              foregroundColor: Colors.black,
+                            ),
+                            child: Text(
+                                alreadyLeft ? 'ALREADY SUBMITTED' : 'SUBMIT'),
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
-                ),
-
-                const SizedBox(height: 8),
-
-                Text(a.title,
-                    style: const TextStyle(
-                        fontSize: 20, fontWeight: FontWeight.w800)),
-                const SizedBox(height: 12),
-
-                if (alreadyLeft)
-                  Material(
-                    color: Colors.yellow.shade50,
-                    borderRadius: BorderRadius.circular(12),
-                    child: const Padding(
-                      padding: EdgeInsets.all(12),
-                      child: Text(
-                        'You already submitted feedback for this post.',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                  ),
-
-                if (!alreadyLeft) ...[
-                  _Section(
-                    title: 'Visual Appeal',
-                    question:
-                        'How attractive and polished does this design look?',
-                    onChanged: (v) => setState(() => visual = v),
-                    controller: visualC,
-                  ),
-                  _Section(
-                    title: 'Accessibility',
-                    question:
-                        'Can people of all abilities use this comfortably?',
-                    onChanged: (v) => setState(() => accessibility = v),
-                    controller: accessibilityC,
-                  ),
-                  _Section(
-                    title: 'Usability',
-                    question:
-                        'Is it straightforward to navigate and accomplish tasks?',
-                    onChanged: (v) => setState(() => usability = v),
-                    controller: usabilityC,
-                  ),
-                  _Section(
-                    title: 'Clarity & Structure',
-                    question:
-                        'Are information and actions clear and well-organized?',
-                    onChanged: (v) => setState(() => clarity = v),
-                    controller: clarityC,
-                  ),
-                  _Section(
-                    title: 'Overall Experience',
-                    question: 'Your gut-level rating of the design as a whole.',
-                    onChanged: (v) => setState(() => overall = v),
-                    controller: overallC,
-                  ),
-
-                  const SizedBox(height: 8),
-                  ElevatedButton(
-                    onPressed: submitting || alreadyLeft
-                        ? null
-                        : () => _submit(a),
-                    child: submitting
-                        ? const SizedBox(
-                            height: 18,
-                            width: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text('Submit'),
-                  ),
-                ],
-              ],
+                );
+              },
             );
           },
         ),
       ),
-
-      // ✅ unified bottom nav
       bottomNavigationBar: const AppBottomNav(current: BottomTab.home),
     );
   }
-
-  double _avg(List<double> xs) {
-    final n = xs.where((e) => e > 0).toList();
-    if (n.isEmpty) return 0;
-    final s = n.fold(0.0, (a, b) => a + b);
-    return s / n.length;
-  }
 }
+
+// ---------- widgets ----------
 
 class _Section extends StatelessWidget {
   const _Section({
     required this.title,
     required this.question,
+    required this.value,
     required this.onChanged,
     required this.controller,
   });
 
   final String title;
   final String question;
+  final double value;
   final ValueChanged<double> onChanged;
   final TextEditingController controller;
 
   @override
   Widget build(BuildContext context) {
-    double localValue = 0;
-
-    Widget stars(double v, void Function(double) set) {
-      const size = 22.0;
-      int full = v.floor();
-      double frac = v - full;
-      bool half = frac >= 0.25 && frac < 0.75;
-      int extra = frac >= 0.75 ? 1 : 0;
-
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        children: List.generate(5, (i) {
-          IconData icon;
-          if (i < full + extra) {
-            icon = Icons.star;
-          } else if (i == full && half) {
-            icon = Icons.star_half;
-          } else {
-            icon = Icons.star_border;
-          }
-          return InkWell(
-            onTap: () {
-              set(i + 1.0);
-              onChanged(i + 1.0);
-            },
-            child: Icon(icon, size: size, color: const Color(0xFFD9C63F)),
-          );
-        }),
-      );
-    }
-
-    return StatefulBuilder(builder: (context, setState) {
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title,
-                style: const TextStyle(
-                    fontWeight: FontWeight.w800, fontSize: 16)),
-            const SizedBox(height: 4),
-            Text(question, style: const TextStyle(color: Colors.black54)),
-            const SizedBox(height: 8),
-            stars(localValue, (v) => setState(() => localValue = v)),
-            const SizedBox(height: 8),
-            Material(
-              elevation: 2,
-              shadowColor: Colors.black12,
-              borderRadius: BorderRadius.circular(12),
-              child: TextField(
-                controller: controller,
-                minLines: 2,
-                maxLines: 4,
-                decoration: const InputDecoration(
-                  hintText: 'Add your note (optional)',
-                  border: InputBorder.none,
-                  contentPadding:
-                      EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                ),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title,
+              style:
+                  const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+          const SizedBox(height: 4),
+          Text(question,
+              style: const TextStyle(color: Colors.black54, fontSize: 12)),
+          const SizedBox(height: 8),
+          StarPicker(value: value, onChanged: onChanged),
+          const SizedBox(height: 8),
+          Material(
+            color: Colors.white,
+            elevation: 0.5,
+            borderRadius: BorderRadius.circular(12),
+            child: TextField(
+              controller: controller,
+              maxLines: null,
+              decoration: const InputDecoration(
+                hintText: 'Add details',
+                border: InputBorder.none,
+                contentPadding:
+                    EdgeInsets.symmetric(horizontal: 12, vertical: 12),
               ),
             ),
-          ],
-        ),
-      );
-    });
+          ),
+        ],
+      ),
+    );
   }
+}
+
+class StarPicker extends StatelessWidget {
+  const StarPicker({super.key, required this.value, required this.onChanged});
+  final double value;
+  final ValueChanged<double> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final filled = value.round(); // step 1 for clean UI like mockups
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(5, (i) {
+        final isOn = i < filled;
+        return InkWell(
+          onTap: () => onChanged(i + 1.0),
+          child: Padding(
+            padding: const EdgeInsets.only(right: 4),
+            child: Icon(
+              isOn ? Icons.star : Icons.star_border,
+              size: 24,
+              color: const Color(0xFFD9C63F),
+            ),
+          ),
+        );
+      }),
+    );
+  }
+}
+
+class _Stars extends StatelessWidget {
+  const _Stars({required this.value});
+  final double value;
+
+  @override
+  Widget build(BuildContext context) {
+    const double size = 16;
+    final full = value.floor();
+    final frac = value - full;
+    final hasHalf = frac >= 0.25 && frac < 0.75;
+    final extraFull = frac >= 0.75 ? 1 : 0;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(5, (i) {
+        IconData icon;
+        if (i < full + extraFull) {
+          icon = Icons.star;
+        } else if (i == full && hasHalf) {
+          icon = Icons.star_half;
+        } else {
+          icon = Icons.star_border;
+        }
+        return Icon(icon, size: size, color: const Color(0xFFD9C63F));
+      }),
+    );
+  }
+}
+
+// utils
+DateTime? _toDate(dynamic v) {
+  if (v == null) return null;
+  if (v is DateTime) return v;
+  try {
+    return (v as Timestamp).toDate();
+  } catch (_) {
+    return null;
+  }
+}
+
+String? _formatDate(DateTime? d) {
+  if (d == null) return null;
+  return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 }
