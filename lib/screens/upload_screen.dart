@@ -252,45 +252,60 @@ class _UploadScreenState extends State<UploadScreen> {
 
             const SizedBox(height: 20),
 
+            // ==== Buttons row (match Feedback screen) ====
             Row(
+              mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: _submitting
-                        ? null
-                        : () {
-                            setState(() {
-                              _files.clear();
-                              _progress.clear();
-                              _title.clear();
-                              _desc.clear();
-                            });
-                            Navigator.pop(context);
-                          },
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      side: const BorderSide(color: Colors.brown),
-                      shape: const StadiumBorder(),
-                      foregroundColor: Colors.brown,
+                ElevatedButton(
+                  onPressed: _submitting
+                      ? null
+                      : () {
+                          setState(() {
+                            _files.clear();
+                            _progress.clear();
+                            _title.clear();
+                            _desc.clear();
+                          });
+                          Navigator.pop(context);
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF64330A), // cancel color
+                    foregroundColor: Colors.white,
+                    elevation: 3,
+                    shadowColor: Colors.black26,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                    minimumSize: const Size(0, 40),
+                    shape: const StadiumBorder(), // pill
+                    textStyle: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: .25,
                     ),
-                    child: const Text('CANCEL'),
                   ),
+                  child: const Text('CANCEL'),
                 ),
                 const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: _submitting ? null : _submit,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: yellow,
-                      shape: const StadiumBorder(),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      elevation: 2,
-                      foregroundColor: Colors.white,
+                ElevatedButton(
+                  onPressed: _submitting ? null : _submit,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFE1D145), // submit color
+                    foregroundColor: Colors.white, // white text
+                    elevation: 3,
+                    shadowColor: Colors.black26,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                    minimumSize: const Size(0, 40),
+                    shape: const StadiumBorder(), // pill
+                    textStyle: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: .25,
                     ),
-                    child: _submitting
-                        ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Text('SUBMIT'),
                   ),
+                  child: _submitting
+                      ? const SizedBox(
+                          height: 18,
+                          width: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('SUBMIT'),
                 ),
               ],
             ),

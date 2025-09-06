@@ -378,28 +378,49 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
 
                     const SizedBox(height: 10),
 
-                    // Cancel / Submit
+                    // Cancel / Submit (pill style, right aligned, 12px gap)
                     Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: submitting ? null : () {
-                              Navigator.pop(context);
-                            },
-                            child: const Text('CANCEL'),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: ElevatedButton(
-                            onPressed: submitting || alreadyLeft ? null : _submit,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFD9C63F),
-                              foregroundColor: Colors.black,
+                        ElevatedButton(
+                          onPressed: submitting ? null : () {
+                            Navigator.pop(context);
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF64330A), // cancel
+                            foregroundColor: Colors.white,
+                            elevation: 3,
+                            shadowColor: Colors.black26,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 20, vertical: 8), // <— updated
+                            minimumSize: const Size(0, 40),
+                            shape: const StadiumBorder(), // pill
+                            textStyle: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: .25,
                             ),
-                            child: Text(
-                                alreadyLeft ? 'ALREADY SUBMITTED' : 'SUBMIT'),
                           ),
+                          child: const Text('CANCEL'),
+                        ),
+                        const SizedBox(width: 12),
+                        ElevatedButton(
+                          onPressed: submitting || alreadyLeft ? null : _submit,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFE1D145), // submit
+                            foregroundColor: Colors.white,               // <— text white
+                            elevation: 3,
+                            shadowColor: Colors.black26,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 20, vertical: 8), // <— updated
+                            minimumSize: const Size(0, 40),
+                            shape: const StadiumBorder(), // pill
+                            textStyle: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: .25,
+                            ),
+                          ),
+                          child: Text(
+                              alreadyLeft ? 'ALREADY SUBMITTED' : 'SUBMIT'),
                         ),
                       ],
                     ),

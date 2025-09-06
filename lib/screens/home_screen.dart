@@ -51,7 +51,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
             return CustomScrollView(
               slivers: [
-                // Header
+                // Header (unchanged, no extra top spacer)
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -74,43 +74,76 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
 
+                // === 40px gap between header and slogo ===
+                const SliverToBoxAdapter(child: SizedBox(height: 40)),
+
+                // Slogo centered
                 const SliverToBoxAdapter(
                   child: Padding(
-                    padding: EdgeInsets.fromLTRB(16, 12, 16, 8),
-                    child: Text(
-                      'Turn feedback into\nbrilliant design',
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w800,
-                        height: 1.15,
+                    padding: EdgeInsets.symmetric(horizontal: 16),
+                    child: Center(
+                      child: Text(
+                        'Turn feedback into\nbrilliant design',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w800,
+                          height: 1.15,
+                        ),
                       ),
                     ),
                   ),
                 ),
 
-                // Sort / Filter
+                // === 40px gap below slogo ===
+                const SliverToBoxAdapter(child: SizedBox(height: 40)),
+
+                // Sort / Filter — right aligned, pill design
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
                       children: [
                         OutlinedButton.icon(
                           onPressed: _pickSortBy,
-                          icon: const Icon(Icons.swap_vert),
+                          icon: const Icon(Icons.swap_vert, size: 18),
                           label: Text(
                             _sortBy == _SortBy.dateDesc ? 'Sort by' : 'Sort: Stars',
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            side: const BorderSide(color: Colors.black12, width: 1),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(40), // pill
+                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                           ),
                         ),
                         const SizedBox(width: 8),
                         OutlinedButton.icon(
                           onPressed: _pickFilters,
-                          icon: const Icon(Icons.filter_alt_outlined),
-                          label: Text(_filterLabel),
+                          icon: const Icon(Icons.filter_alt_outlined, size: 18),
+                          label: Text(
+                            _filterLabel,
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            side: const BorderSide(color: Colors.black12, width: 1),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(40), // pill
+                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          ),
                         ),
                       ],
                     ),
                   ),
                 ),
+
+                // === 12px gap before cards ===
                 const SliverToBoxAdapter(child: SizedBox(height: 12)),
 
                 // Posts list
