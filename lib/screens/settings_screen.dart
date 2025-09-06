@@ -1,7 +1,8 @@
+// lib/screens/settings_screen.dart
 import 'dart:io' show File;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_auth/firebase_auth.dart' as fa;
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -11,108 +12,240 @@ import '../widgets/app_bottom_nav.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
-
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  bool _saving = false;
+  bool saving = false;
 
-  Future<void> _editText({
-    required String title,
-    String initial = '',
-    bool obscure = false,
-    TextInputType keyboardType = TextInputType.text,
-    required Future<void> Function(String) onSave,
-  }) async {
-    final c = TextEditingController(text: initial);
-    final messenger = ScaffoldMessenger.of(context);
-
-    final ok = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      builder: (ctx) {
-        return Padding(
-          padding: EdgeInsets.only(
-              bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
-              left: 16,
-              right: 16,
-              top: 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-              const SizedBox(height: 10),
-              TextField(
-                controller: c,
-                keyboardType: keyboardType,
-                obscureText: obscure,
-                decoration: const InputDecoration(border: OutlineInputBorder()),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(child: OutlinedButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel'))),
-                  const SizedBox(width: 8),
-                  Expanded(child: ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save'))),
-                ],
-              ),
-              const SizedBox(height: 8),
-            ],
-          ),
-        );
-      },
-    );
-
-    if (ok == true) {
-      setState(() => _saving = true);
-      try {
-        await onSave(c.text.trim());
-        messenger.showSnackBar(const SnackBar(content: Text('Updated.')));
-      } on FirebaseException catch (e) {
-        messenger.showSnackBar(SnackBar(content: Text(e.message ?? 'Failed to update')));
-      } finally {
-        if (mounted) setState(() => _saving = false);
-      }
-    }
-  }
-
+  // ---------- Photo ----------
   Future<void> _pickAndUploadPhoto() async {
-    final user = FirebaseAuth.instance.currentUser!;
+    final fa.User user = fa.FirebaseAuth.instance.currentUser!;
     final uid = user.uid;
-    final messenger = ScaffoldMessenger.of(context);
 
     final x = await ImagePicker().pickImage(source: ImageSource.gallery);
     if (x == null) return;
 
-    setState(() => _saving = true);
+    setState(() => saving = true);
     try {
-      // Use compatible form on all plugin versions
-      final ref = FirebaseStorage.instance.ref().child('profile_photos/$uid.jpg');
+      final ref = FirebaseStorage.instance.ref('profile_photos/$uid.jpg');
 
       if (kIsWeb) {
         final bytes = await x.readAsBytes();
-        final mime = x.mimeType ?? 'image/jpeg';
-        await ref.putData(bytes, SettableMetadata(contentType: mime));
+        await ref.putData(bytes, SettableMetadata(contentType: x.mimeType ?? 'image/jpeg'));
       } else {
         await ref.putFile(File(x.path));
       }
 
       final url = await ref.getDownloadURL();
       await FirebaseFirestore.instance.collection('users').doc(uid).update({'photoUrl': url});
-      await FirebaseAuth.instance.currentUser!.updatePhotoURL(url);
-      messenger.showSnackBar(const SnackBar(content: Text('Photo updated.')));
+      await user.updatePhotoURL(url);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Photo updated.')));
     } on FirebaseException catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.message ?? 'Failed to upload photo')));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message ?? 'Failed to upload photo')));
     } finally {
-      if (mounted) setState(() => _saving = false);
+      if (mounted) setState(() => saving = false);
     }
   }
 
+  // ---------- Inline editor ----------
+  Future<void> _editText({
+    required String title,
+    String initial = '',
+    TextInputType keyboardType = TextInputType.text,
+    bool obscure = false,
+    required Future<void> Function(String) onSave,
+  }) async {
+    final c = TextEditingController(text: initial);
+
+    final ok = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+          left: 16, right: 16, top: 16,
+          bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+            const SizedBox(height: 10),
+            TextField(
+              controller: c,
+              keyboardType: keyboardType,
+              obscureText: obscure,
+              decoration: const InputDecoration(border: OutlineInputBorder()),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(child: OutlinedButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel'))),
+                const SizedBox(width: 8),
+                Expanded(child: ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save'))),
+              ],
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+
+    if (ok != true) return;
+
+    setState(() => saving = true);
+    try {
+      await onSave(c.text.trim());
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Updated.')));
+    } on FirebaseException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message ?? 'Failed to update')));
+    } finally {
+      if (mounted) setState(() => saving = false);
+    }
+  }
+
+  // ---------- Email (verify-first; matches `pendingEmail` in your schema) ----------
+  Future<void> _changeEmailDirect() async {
+    final usersRef = FirebaseFirestore.instance
+        .collection('users')
+        .doc(fa.FirebaseAuth.instance.currentUser!.uid);
+
+    final emailC = TextEditingController(
+      text: fa.FirebaseAuth.instance.currentUser!.email ?? '',
+    );
+    final passC = TextEditingController();
+
+    final ok = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+          left: 16, right: 16, top: 16,
+          bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Change email', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+            const SizedBox(height: 10),
+            TextField(
+              controller: emailC,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(labelText: 'New email', border: OutlineInputBorder()),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: passC,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: 'Current password', border: OutlineInputBorder()),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(child: OutlinedButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel'))),
+                const SizedBox(width: 8),
+                Expanded(child: ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Update'))),
+              ],
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+
+    if (ok != true) return;
+
+    final newEmail = emailC.text.trim();
+    final password = passC.text;
+    if (newEmail.isEmpty || password.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter email and password.')));
+      return;
+    }
+
+    setState(() => saving = true);
+    try {
+      // 1) recent login required
+      final fa.User current = fa.FirebaseAuth.instance.currentUser!;
+      final cred = fa.EmailAuthProvider.credential(email: current.email!, password: password);
+      await current.reauthenticateWithCredential(cred);
+
+      // 2) send verification to NEW email; Auth will finalize after user clicks it
+      await current.verifyBeforeUpdateEmail(newEmail);
+
+      // 3) reflect pending state in Firestore (do not overwrite `email` yet)
+      await usersRef.update({
+        'pendingEmail': newEmail,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Verification sent to $newEmail. Check your inbox.')),
+      );
+    } on fa.FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      String msg = e.message ?? 'Failed to start email change.';
+      if (e.code == 'requires-recent-login') msg = 'Please sign in again and retry (recent login required).';
+      if (e.code == 'email-already-in-use') msg = 'That email is already in use.';
+      if (e.code == 'invalid-email') msg = 'Invalid email address.';
+      if (e.code == 'wrong-password') msg = 'Incorrect password.';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    } finally {
+      if (mounted) setState(() => saving = false);
+    }
+  }
+
+  // Resend verification to the pending email
+  Future<void> _resendVerificationForPendingEmail(String pendingEmail) async {
+    final fa.User current = fa.FirebaseAuth.instance.currentUser!;
+    setState(() => saving = true);
+    try {
+      await current.verifyBeforeUpdateEmail(pendingEmail);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Verification re-sent to $pendingEmail.')),
+      );
+    } on fa.FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message ?? 'Failed to resend verification.')),
+      );
+    } finally {
+      if (mounted) setState(() => saving = false);
+    }
+  }
+
+  // Cancel the pending change (clears Firestore flag)
+  Future<void> _cancelPendingEmailChange(
+    DocumentReference<Map<String, dynamic>> usersRef) async {
+    setState(() => saving = true);
+    try {
+      await usersRef.update({'pendingEmail': FieldValue.delete()});
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Pending email change canceled.')),
+      );
+    } on FirebaseException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message ?? 'Failed to cancel.')),
+      );
+    } finally {
+      if (mounted) setState(() => saving = false);
+    }
+  }
+
+  // ---------- UI ----------
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser!;
+    final fa.User user = fa.FirebaseAuth.instance.currentUser!;
     final usersRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
 
     return Scaffold(
@@ -124,27 +257,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
             final name = (data['name'] as String?) ?? '';
             final username = (data['username'] as String?) ?? '';
             final phone = (data['phone'] as String?) ?? '';
-            final email = user.email ?? '';
-            final pendingEmail = (data['pendingEmail'] as String?) ?? '';
             final photoUrl = (data['photoUrl'] as String?) ?? '';
             final notifyPush = (data['notifyPush'] as bool?) ?? true;
             final notifyEmail = (data['notifyEmail'] as bool?) ?? true;
+            final pendingEmail = (data['pendingEmail'] as String?) ?? '';
+
+            final email = user.email ?? '';
 
             return ListView(
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
               children: [
                 Row(
                   children: [
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back),
-                      onPressed: () => Navigator.pop(context),
-                    ),
+                    IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => Navigator.pop(context)),
                     const Expanded(
-                      child: Text(
-                        'Settings',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                      ),
+                      child: Text('Settings', textAlign: TextAlign.center, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
                     ),
                     const SizedBox(width: 48),
                   ],
@@ -162,11 +289,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       backgroundImage: photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
                       child: photoUrl.isEmpty ? const Icon(Icons.person) : null,
                     ),
-                    title: Text(username.isEmpty ? (name.isEmpty ? 'No name' : name) : username,
-                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                    title: Text(
+                      username.isEmpty ? (name.isEmpty ? 'No name' : name) : username,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
                     subtitle: Text(email),
                     trailing: OutlinedButton.icon(
-                      onPressed: _saving ? null : _pickAndUploadPhoto,
+                      onPressed: saving ? null : _pickAndUploadPhoto,
                       icon: const Icon(Icons.photo_camera_outlined),
                       label: const Text('Change'),
                     ),
@@ -175,83 +304,120 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                 const SizedBox(height: 12),
 
+                // Show pending email notice (if any)
+                if (pendingEmail.isNotEmpty) ...[
+                  Material(
+                    color: Colors.white,
+                    elevation: 1,
+                    borderRadius: BorderRadius.circular(12),
+                    child: ListTile(
+                      leading: const Icon(Icons.mark_email_read_outlined),
+                      title: const Text('Email change pending', style: TextStyle(fontWeight: FontWeight.w700)),
+                      subtitle: Text('Check $pendingEmail for a verification link.'),
+                      trailing: Wrap(
+                        spacing: 8,
+                        children: [
+                          TextButton(
+                            onPressed: saving ? null : () => _resendVerificationForPendingEmail(pendingEmail),
+                            child: const Text('Resend'),
+                          ),
+                          TextButton(
+                            onPressed: saving ? null : () => _cancelPendingEmailChange(usersRef),
+                            child: const Text('Cancel'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+
+                // Name
                 _SettingTile(
                   icon: Icons.person_outline,
                   title: 'Name',
                   subtitle: name.isEmpty ? 'Add your name' : name,
-                  onTap: _saving
+                  onTap: saving
                       ? null
                       : () => _editText(
                             title: 'Your name',
                             initial: name,
                             onSave: (v) async {
                               await usersRef.update({'name': v});
-                              await FirebaseAuth.instance.currentUser!.updateDisplayName(v);
+                              await fa.FirebaseAuth.instance.currentUser!.updateDisplayName(v);
                             },
                           ),
                 ),
 
+                // Username (rules: /usernames/{unameLower} has { uid: ... })
                 _SettingTile(
                   icon: Icons.badge_outlined,
                   title: 'Username',
                   subtitle: username.isEmpty ? 'Add username' : username,
                   trailingArrow: true,
-                  onTap: _saving
+                  onTap: saving
                       ? null
                       : () => _editText(
                             title: 'Username',
                             initial: username,
                             onSave: (val) async {
-                              final newLower = val.toLowerCase();
+                              final fa.User authUser = fa.FirebaseAuth.instance.currentUser!;
                               final usernames = FirebaseFirestore.instance.collection('usernames');
 
+                              final newLower = val.trim().toLowerCase();
+                              if (newLower.isEmpty) {
+                                throw FirebaseException(plugin: 'firestore', message: 'Username cannot be empty.');
+                              }
+
                               await FirebaseFirestore.instance.runTransaction((tx) async {
-                                final takenSnap = await tx.get(usernames.doc(newLower));
-                                if (takenSnap.exists) {
+                                final meSnap = await tx.get(usersRef);
+                                final me = meSnap.data() ?? {};
+                                final oldLower = (me['usernameLower'] as String?) ?? '';
+
+                                if (oldLower == newLower) return;
+
+                                final taken = await tx.get(usernames.doc(newLower));
+                                if (taken.exists) {
                                   throw FirebaseException(plugin: 'firestore', message: 'Username already taken.');
                                 }
-                                final oldLower = username.toLowerCase();
+
                                 if (oldLower.isNotEmpty) {
-                                  tx.delete(usernames.doc(oldLower));
+                                  final oldDoc = await tx.get(usernames.doc(oldLower));
+                                  if (oldDoc.exists) tx.delete(usernames.doc(oldLower));
                                 }
+
                                 tx.set(usernames.doc(newLower), {
-                                  'ownerId': user.uid,
+                                  'uid': authUser.uid,
                                   'updatedAt': FieldValue.serverTimestamp(),
                                 });
+
                                 tx.update(usersRef, {
-                                  'username': val,
+                                  'username': val.trim(),
                                   'usernameLower': newLower,
                                 });
                               });
-                              await FirebaseAuth.instance.currentUser!.updateDisplayName(val);
+
+                              await fa.FirebaseAuth.instance.currentUser!.updateDisplayName(val.trim());
                             },
                           ),
                 ),
 
+                // Email – change (verify-first)
                 _SettingTile(
                   icon: Icons.email_outlined,
                   title: 'Email',
-                  subtitle: pendingEmail.isNotEmpty ? 'Pending verification: $pendingEmail' : email,
+                  subtitle: email,
                   trailingArrow: true,
-                  onTap: _saving
-                      ? null
-                      : () => _editText(
-                            title: 'Email',
-                            initial: email,
-                            keyboardType: TextInputType.emailAddress,
-                            onSave: (v) async {
-                              // Your existing email change flow here
-                              await usersRef.update({'pendingEmail': v});
-                            },
-                          ),
+                  onTap: saving ? null : _changeEmailDirect,
                 ),
 
+                // Phone
                 _SettingTile(
                   icon: Icons.phone_outlined,
                   title: 'Phone',
                   subtitle: phone.isEmpty ? 'Add phone' : phone,
                   trailingArrow: true,
-                  onTap: _saving
+                  onTap: saving
                       ? null
                       : () => _editText(
                             title: 'Phone number',
@@ -261,22 +427,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                 ),
 
+                // Toggles
                 _ToggleTile(
                   icon: Icons.notifications_none,
                   title: 'Push Notifications',
                   subtitle: 'Get important updates',
                   value: notifyPush,
-                  onChanged: _saving ? null : (v) => usersRef.update({'notifyPush': v}),
+                  onChanged: saving ? null : (v) => usersRef.update({'notifyPush': v}),
                 ),
                 _ToggleTile(
                   icon: Icons.mark_email_unread_outlined,
                   title: 'Email Updates',
                   subtitle: 'Receive email newsletters',
                   value: notifyEmail,
-                  onChanged: _saving ? null : (v) => usersRef.update({'notifyEmail': v}),
+                  onChanged: saving ? null : (v) => usersRef.update({'notifyEmail': v}),
                 ),
 
-                if (_saving)
+                if (saving)
                   const Padding(
                     padding: EdgeInsets.only(top: 16),
                     child: Center(child: CircularProgressIndicator()),
