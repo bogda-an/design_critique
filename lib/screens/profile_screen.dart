@@ -1,3 +1,4 @@
+// lib/screens/profile_screen.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -45,6 +46,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _auth = FirebaseAuth.instance;
   final _db = FirebaseFirestore.instance;
 
+  bool _busyDelete = false;
+
   Widget _guard<T>(AsyncSnapshot<T> snap, Widget Function() build) {
     if (snap.hasError) {
       return Padding(
@@ -59,6 +62,336 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
     }
     return build();
+  }
+
+  // ---------- Delete helpers (no UI changes elsewhere) ----------
+  Future<void> _deleteDesignAndComments(String postId) async {
+    setState(() => _busyDelete = true);
+    try {
+      final postRef = _db.collection('posts').doc(postId);
+      // delete all feedback docs
+      final fb = await postRef.collection('feedback').get();
+      final batch = _db.batch();
+      for (final d in fb.docs) {
+        batch.delete(d.reference);
+      }
+      // delete the post itself
+      batch.delete(postRef);
+      await batch.commit();
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Design deleted.')),
+      );
+    } on FirebaseException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message ?? 'Failed to delete')),
+      );
+    } finally {
+      if (!mounted) return;
+      setState(() => _busyDelete = false);
+    }
+  }
+
+  Future<void> _confirmDeleteDesign({
+    required String postId,
+    required String title,
+    String? coverUrl,
+  }) async {
+    final ok = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(children: const [
+              Icon(Icons.warning_amber_rounded, color: Colors.redAccent),
+              SizedBox(width: 10),
+              Text('Delete this design?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+            ]),
+            const SizedBox(height: 12),
+            Material(
+              color: Colors.white,
+              elevation: 1,
+              borderRadius: BorderRadius.circular(12),
+              child: ListTile(
+                leading: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: (coverUrl != null && (coverUrl).isNotEmpty)
+                      ? Image.network(coverUrl!, width: 48, height: 48, fit: BoxFit.cover)
+                      : Container(width: 48, height: 48, color: Colors.grey.shade200,
+                          child: const Icon(Icons.image_outlined, color: Colors.black54)),
+                ),
+                title: Text(title.isEmpty ? 'Untitled' : title,
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w700)),
+                subtitle: const Text('This will permanently remove the design and all comments.'),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Text('Cancel'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.redAccent, foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Text('Delete'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+          ],
+        ),
+      ),
+    );
+
+    if (ok == true) {
+      await _deleteDesignAndComments(postId);
+    }
+  }
+
+  Future<void> _showDesignActions({
+    required String postId,
+    required String title,
+    String? coverUrl,
+  }) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                if (coverUrl != null && coverUrl.isNotEmpty)
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.network(coverUrl, width: 48, height: 48, fit: BoxFit.cover),
+                  )
+                else
+                  Container(
+                    width: 48, height: 48,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade200, borderRadius: BorderRadius.circular(12)),
+                    child: const Icon(Icons.image_outlined, color: Colors.black54),
+                  ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    title.isEmpty ? 'Untitled' : title,
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
+                ),
+                IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx))
+              ],
+            ),
+            const SizedBox(height: 8),
+            Material(
+              color: Colors.white,
+              child: ListTile(
+                leading: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                title: const Text('Delete design'),
+                subtitle: const Text('Also removes all comments'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _confirmDeleteDesign(postId: postId, title: title, coverUrl: coverUrl);
+                },
+              ),
+            ),
+            const SizedBox(height: 6),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _deleteMyComment({
+    required String postId,
+    required String reviewerUid,
+  }) async {
+    setState(() => _busyDelete = true);
+    try {
+      final ref = _db.collection('posts').doc(postId).collection('feedback').doc(reviewerUid);
+      await ref.delete();
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Comment deleted.')),
+      );
+    } on FirebaseException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message ?? 'Failed to delete comment')),
+      );
+    } finally {
+      if (!mounted) return;
+      setState(() => _busyDelete = false);
+    }
+  }
+
+  Future<void> _confirmDeleteComment({
+    required String postTitle,
+    required String postId,
+    required String reviewerUid,
+    String? postCoverUrl,
+  }) async {
+    final ok = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(children: const [
+              Icon(Icons.warning_amber_rounded, color: Colors.redAccent),
+              SizedBox(width: 10),
+              Text('Delete this comment?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+            ]),
+            const SizedBox(height: 12),
+            Material(
+              color: Colors.white,
+              elevation: 1,
+              borderRadius: BorderRadius.circular(12),
+              child: ListTile(
+                leading: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: (postCoverUrl != null && postCoverUrl.isNotEmpty)
+                      ? Image.network(postCoverUrl, width: 48, height: 48, fit: BoxFit.cover)
+                      : Container(width: 48, height: 48, color: Colors.grey.shade200,
+                          child: const Icon(Icons.image_outlined, color: Colors.black54)),
+                ),
+                title: Text(postTitle.isEmpty ? 'Untitled' : postTitle,
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w700)),
+                subtitle: const Text('This will permanently remove your comment.'),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Text('Cancel'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.redAccent, foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Text('Delete'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+          ],
+        ),
+      ),
+    );
+
+    if (ok == true) {
+      await _deleteMyComment(postId: postId, reviewerUid: reviewerUid);
+    }
+  }
+
+  Future<void> _showCommentActions({
+    required String postId,
+    required String postTitle,
+    required String reviewerUid,
+    String? postCoverUrl,
+  }) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                if (postCoverUrl != null && postCoverUrl.isNotEmpty)
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.network(postCoverUrl, width: 48, height: 48, fit: BoxFit.cover),
+                  )
+                else
+                  Container(
+                    width: 48, height: 48,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade200, borderRadius: BorderRadius.circular(12)),
+                    child: const Icon(Icons.image_outlined, color: Colors.black54),
+                  ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    postTitle.isEmpty ? 'Untitled' : postTitle,
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
+                ),
+                IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx))
+              ],
+            ),
+            const SizedBox(height: 8),
+            Material(
+              color: Colors.white,
+              child: ListTile(
+                leading: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                title: const Text('Delete comment'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _confirmDeleteComment(
+                    postTitle: postTitle,
+                    postId: postId,
+                    reviewerUid: reviewerUid,
+                    postCoverUrl: postCoverUrl,
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 6),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -89,192 +422,218 @@ class _ProfileScreenState extends State<ProfileScreen> {
             final displayName = profile?['username'] ?? user.displayName ?? 'user';
             final photoUrl = profile?['photoUrl'] ?? user.photoURL;
 
-            return SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Header
-                  Row(
+            return Stack(
+              children: [
+                SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      CircleAvatar(
-                        radius: 26,
-                        backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
-                        child: photoUrl == null ? const Icon(Icons.person, size: 28) : null,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Row(
-                          children: [
-                            Text(displayName,
-                                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
-                            const SizedBox(width: 12),
-                            StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                              stream: myPostsQ.snapshots(),
-                              builder: (context, s1) {
-                                final designs = s1.data?.size ?? 0;
-                                return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                                  stream: myCritiquesQ.snapshots(),
-                                  builder: (context, s2) {
-                                    final critiques = s2.data?.size ?? 0;
-                                    return Text(
-                                      '  $designs Designs  $critiques Critiques',
-                                      style: const TextStyle(fontSize: 16, color: Colors.grey),
+                      // Header
+                      Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 26,
+                            backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
+                            child: photoUrl == null ? const Icon(Icons.person, size: 28) : null,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Row(
+                              children: [
+                                Text(displayName,
+                                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
+                                const SizedBox(width: 12),
+                                StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                                  stream: myPostsQ.snapshots(),
+                                  builder: (context, s1) {
+                                    final designs = s1.data?.size ?? 0;
+                                    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                                      stream: myCritiquesQ.snapshots(),
+                                      builder: (context, s2) {
+                                        final critiques = s2.data?.size ?? 0;
+                                        return Text(
+                                          '  $designs Designs  $critiques Critiques',
+                                          style: const TextStyle(fontSize: 16, color: Colors.grey),
+                                        );
+                                      },
                                     );
                                   },
-                                );
-                              },
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.settings_outlined),
+                            onPressed: widget.onOpenSettings ??
+                                () => Navigator.of(context).pushNamed('/settings'),
+                          ),
+                        ],
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.settings_outlined),
-                        onPressed: widget.onOpenSettings ??
-                            () => Navigator.of(context).pushNamed('/settings'),
+
+                      const SizedBox(height: 20),
+                      const Text('Your Designs',
+                          style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 12),
+
+                      // DESIGNS GRID (responsive)
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final w = constraints.maxWidth;
+                          // keep 2 columns for phones
+                          const crossAxisCount = 2;
+
+                          // Make cards taller on narrow screens to prevent overflow
+                          final ratio = w < 360
+                              ? 0.56
+                              : (w < 420 ? 0.62 : (w < 520 ? 0.70 : 0.80));
+
+                          return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                            stream: myPostsQ.snapshots(),
+                            builder: (context, snap) => _guard(snap, () {
+                              final docs = snap.data?.docs ?? const [];
+                              if (docs.isEmpty) {
+                                return const Padding(
+                                  padding: EdgeInsets.only(top: 6),
+                                  child: Text("You didn’t post any designs yet."),
+                                );
+                              }
+
+                              return GridView.builder(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                itemCount: docs.length,
+                                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: crossAxisCount,
+                                  mainAxisSpacing: 18,
+                                  crossAxisSpacing: 18,
+                                  childAspectRatio: ratio,
+                                ),
+                                itemBuilder: (_, i) {
+                                  final doc = docs[i];
+                                  final d = doc.data();
+
+                                  final cover = d['coverUrl'] ??
+                                      d['thumbnailUrl'] ??
+                                      d['imageUrl'] ??
+                                      ((d['images'] is List && (d['images'] as List).isNotEmpty)
+                                          ? (d['images'] as List).first
+                                          : null);
+
+                                  final title = (d['title'] ?? 'Untitled').toString();
+                                  final authorName = (d['authorName'] ?? '').toString();
+                                  final ts = d['createdAt'] as Timestamp?;
+                                  final created = ts?.toDate();
+
+                                  return _DesignCard(
+                                    postId: doc.id,
+                                    coverUrl: cover,
+                                    title: title,
+                                    authorName: authorName,
+                                    createdAtText: created != null ? _fmtDate(created) : '--',
+                                    // NEW: callback for 3-dots
+                                    onMore: () => _showDesignActions(
+                                      postId: doc.id,
+                                      title: title,
+                                      coverUrl: cover?.toString(),
+                                    ),
+                                  );
+                                },
+                              );
+                            }),
+                          );
+                        },
                       ),
-                    ],
-                  ),
 
-                  const SizedBox(height: 20),
-                  const Text('Your Designs',
-                      style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 12),
+                      const SizedBox(height: 26),
+                      const Text('Your Critiques',
+                          style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 8),
 
-                  // DESIGNS GRID (responsive)
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      final w = constraints.maxWidth;
-                      // keep 2 columns for phones
-                      const crossAxisCount = 2;
-
-                      // Make cards taller on narrow screens to prevent overflow
-                      final ratio = w < 360
-                          ? 0.56
-                          : (w < 420 ? 0.62 : (w < 520 ? 0.70 : 0.80));
-
-                      return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                        stream: myPostsQ.snapshots(),
+                      // CRITIQUES LIST
+                      StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                        stream: myCritiquesQ.snapshots(),
                         builder: (context, snap) => _guard(snap, () {
                           final docs = snap.data?.docs ?? const [];
                           if (docs.isEmpty) {
                             return const Padding(
                               padding: EdgeInsets.only(top: 6),
-                              child: Text("You didn’t post any designs yet."),
+                              child: Text("You haven’t critiqued any design yet."),
                             );
                           }
 
-                          return GridView.builder(
+                          return ListView.separated(
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),
                             itemCount: docs.length,
-                            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: crossAxisCount,
-                              mainAxisSpacing: 18,
-                              crossAxisSpacing: 18,
-                              childAspectRatio: ratio,
-                            ),
+                            separatorBuilder: (_, __) => const Divider(height: 24),
                             itemBuilder: (_, i) {
-                              final doc = docs[i];
-                              final d = doc.data();
+                              final fbDoc = docs[i];
+                              final data = fbDoc.data();
+                              final avg = (data['avg'] as num?)?.toDouble();
+                              final comment = (data['comment'] ??
+                                      (data['notes'] is Map ? (data['notes']['overall'] ?? '') : ''))
+                                  .toString();
+                              final ts = data['createdAt'] as Timestamp?;
+                              final date = ts != null ? _fmtDate(ts.toDate()) : '--';
 
-                              final cover = d['coverUrl'] ??
-                                  d['thumbnailUrl'] ??
-                                  d['imageUrl'] ??
-                                  ((d['images'] is List && (d['images'] as List).isNotEmpty)
-                                      ? (d['images'] as List).first
-                                      : null);
+                              final postRef = fbDoc.reference.parent.parent!;
+                              return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                                future: postRef.get(),
+                                builder: (context, ps) {
+                                  final post = ps.data?.data();
+                                  final postTitle = (post?['title'] ?? 'Design').toString();
+                                  final thumb = post?['coverUrl'] ??
+                                      post?['thumbnailUrl'] ??
+                                      post?['imageUrl'] ??
+                                      ((post?['images'] is List &&
+                                              (post?['images'] as List).isNotEmpty)
+                                          ? (post!['images'] as List).first
+                                          : null);
 
-                              final title = (d['title'] ?? 'Untitled').toString();
-                              final authorName = (d['authorName'] ?? '').toString();
-                              final ts = d['createdAt'] as Timestamp?;
-                              final created = ts?.toDate();
-
-                              return _DesignCard(
-                                postId: doc.id,
-                                coverUrl: cover,
-                                title: title,
-                                authorName: authorName,
-                                createdAtText: created != null ? _fmtDate(created) : '--',
-                              );
-                            },
-                          );
-                        }),
-                      );
-                    },
-                  ),
-
-                  const SizedBox(height: 26),
-                  const Text('Your Critiques',
-                      style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 8),
-
-                  // CRITIQUES LIST
-                  StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                    stream: myCritiquesQ.snapshots(),
-                    builder: (context, snap) => _guard(snap, () {
-                      final docs = snap.data?.docs ?? const [];
-                      if (docs.isEmpty) {
-                        return const Padding(
-                          padding: EdgeInsets.only(top: 6),
-                          child: Text("You haven’t critiqued any design yet."),
-                        );
-                      }
-
-                      return ListView.separated(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: docs.length,
-                        separatorBuilder: (_, __) => const Divider(height: 24),
-                        itemBuilder: (_, i) {
-                          final fbDoc = docs[i];
-                          final data = fbDoc.data();
-                          final avg = (data['avg'] as num?)?.toDouble();
-                          final comment = (data['comment'] ??
-                                  (data['notes'] is Map ? (data['notes']['overall'] ?? '') : ''))
-                              .toString();
-                          final ts = data['createdAt'] as Timestamp?;
-                          final date = ts != null ? _fmtDate(ts.toDate()) : '--';
-
-                          final postRef = fbDoc.reference.parent.parent!;
-                          return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                            future: postRef.get(),
-                            builder: (context, ps) {
-                              final post = ps.data?.data();
-                              final postTitle = (post?['title'] ?? 'Design').toString();
-                              final thumb = post?['coverUrl'] ??
-                                  post?['thumbnailUrl'] ??
-                                  post?['imageUrl'] ??
-                                  ((post?['images'] is List &&
-                                          (post?['images'] as List).isNotEmpty)
-                                      ? (post!['images'] as List).first
-                                      : null);
-
-                              return _CritiqueCard(
-                                thumbnailUrl: thumb,
-                                title: postTitle,
-                                dateText: date,
-                                rating: avg,
-                                commentPreview: comment.isEmpty ? '(no text)' : comment,
-                                onTap: () {
-                                  final reviewerUid = fbDoc.id;
-                                  Navigator.of(context).pushNamed(
-                                    '/commentDetail',
-                                    arguments: CommentDetailArgs(
-                                      postId: postRef.id,
-                                      uid: reviewerUid,
-                                    ),
+                                  return _CritiqueCard(
+                                    thumbnailUrl: thumb,
+                                    title: postTitle,
+                                    dateText: date,
+                                    rating: avg,
+                                    commentPreview: comment.isEmpty ? '(no text)' : comment,
+                                    onTap: () {
+                                      final reviewerUid = fbDoc.id; // feedback doc id == reviewer uid
+                                      Navigator.of(context).pushNamed(
+                                        '/commentDetail',
+                                        arguments: CommentDetailArgs(
+                                          postId: postRef.id,
+                                          uid: reviewerUid,
+                                        ),
+                                      );
+                                    },
+                                    // NEW: 3-dots for comment delete
+                                    onMore: () {
+                                      final reviewerUid = fbDoc.id;
+                                      _showCommentActions(
+                                        postId: postRef.id,
+                                        postTitle: postTitle,
+                                        reviewerUid: reviewerUid,
+                                        postCoverUrl: thumb?.toString(),
+                                      );
+                                    },
                                   );
                                 },
                               );
                             },
                           );
-                        },
-                      );
-                    }),
+                        }),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+
+                if (_busyDelete)
+                  const Align(
+                    alignment: Alignment.topCenter,
+                    child: LinearProgressIndicator(minHeight: 2),
+                  ),
+              ],
             );
           },
         ),
@@ -293,6 +652,7 @@ class _DesignCard extends StatelessWidget {
     required this.title,
     required this.authorName,
     required this.createdAtText,
+    this.onMore,
   });
 
   final String postId;
@@ -300,6 +660,7 @@ class _DesignCard extends StatelessWidget {
   final String title;
   final String authorName;
   final String createdAtText;
+  final VoidCallback? onMore;
 
   @override
   Widget build(BuildContext context) {
@@ -310,7 +671,6 @@ class _DesignCard extends StatelessWidget {
         .snapshots();
 
     final screenW = MediaQuery.of(context).size.width;
-    // ↓ change #1: slightly smaller stars on narrow phones
     final starSize = screenW < 360 ? 12.0 : (screenW < 420 ? 13.0 : 15.0);
 
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
@@ -355,16 +715,38 @@ class _DesignCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Flexible image so text rows always fit
+                // image with 3-dots overlay (keeps exact layout)
                 Expanded(
                   child: ClipRRect(
                     borderRadius: const BorderRadius.only(
                       topLeft: Radius.circular(22),
                       topRight: Radius.circular(22),
                     ),
-                    child: coverUrl != null
-                        ? Image.network(coverUrl!, fit: BoxFit.cover)
-                        : Container(color: Colors.black12),
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: coverUrl != null
+                              ? Image.network(coverUrl!, fit: BoxFit.cover)
+                              : Container(color: Colors.black12),
+                        ),
+                        Positioned(
+                          top: 8,
+                          right: 8,
+                          child: Material(
+                            color: Colors.black.withOpacity(0.50),
+                            borderRadius: BorderRadius.circular(18),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(18),
+                              onTap: onMore,
+                              child: const Padding(
+                                padding: EdgeInsets.all(6),
+                                child: Icon(Icons.more_horiz, color: Colors.white, size: 20),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
 
@@ -390,7 +772,7 @@ class _DesignCard extends StatelessWidget {
                   ),
                 ),
 
-                // ↓ change #2: tighter stars + rating + comments row
+                // stars + rating + comments
                 Padding(
                   padding: const EdgeInsets.fromLTRB(12, 6, 12, 4),
                   child: Row(
@@ -422,7 +804,7 @@ class _DesignCard extends StatelessWidget {
                   ),
                 ),
 
-                // Date (icon removed to save space)
+                // Date
                 Padding(
                   padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
                   child: Text(
@@ -448,6 +830,7 @@ class _CritiqueCard extends StatelessWidget {
     required this.rating,
     required this.commentPreview,
     required this.onTap,
+    this.onMore,
   });
 
   final String? thumbnailUrl;
@@ -456,6 +839,7 @@ class _CritiqueCard extends StatelessWidget {
   final double? rating;
   final String commentPreview;
   final VoidCallback onTap;
+  final VoidCallback? onMore;
 
   @override
   Widget build(BuildContext context) {
@@ -498,6 +882,13 @@ class _CritiqueCard extends StatelessWidget {
                     Text(
                       rating != null ? rating!.toStringAsFixed(1) : '—',
                       style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                    ),
+                    const SizedBox(width: 8),
+                    // 3-dots for comment item
+                    IconButton(
+                      icon: const Icon(Icons.more_horiz),
+                      onPressed: onMore,
+                      tooltip: 'More',
                     ),
                   ],
                 ),
