@@ -222,7 +222,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  // Cancel the pending change (clears Firestore flag)
+  
+  // ---------- Log out ----------
+  Future<void> _confirmAndLogout() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Log out?'),
+        content: const Text('You will be signed out of this device.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Log out')),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      try {
+        await fa.FirebaseAuth.instance.signOut();
+        if (!mounted) return;
+        Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to log out: $e')));
+      }
+    }
+  }
+// Cancel the pending change (clears Firestore flag)
   Future<void> _cancelPendingEmailChange(
     DocumentReference<Map<String, dynamic>> usersRef) async {
     setState(() => saving = true);
@@ -245,7 +270,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // ---------- UI ----------
   @override
   Widget build(BuildContext context) {
-    final fa.User user = fa.FirebaseAuth.instance.currentUser!;
+    final fa.User? user = fa.FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      // When signed out, this screen might still rebuild once; render nothing.
+      return const SizedBox.shrink();
+    }
     final usersRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
 
     return Scaffold(
@@ -443,7 +472,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onChanged: saving ? null : (v) => usersRef.update({'notifyEmail': v}),
                 ),
 
-                if (saving)
+                
+                // Log out
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Material(
+                    color: Colors.white,
+                    elevation: 1,
+                    borderRadius: BorderRadius.circular(12),
+                    child: ListTile(
+                      leading: const Icon(Icons.logout),
+                      title: const Text('Log out', style: TextStyle(fontWeight: FontWeight.w700)),
+                      subtitle: const Text('Sign out of your account'),
+                      onTap: saving ? null : _confirmAndLogout,
+                    ),
+                  ),
+                ),
+if (saving)
                   const Padding(
                     padding: EdgeInsets.only(top: 16),
                     child: Center(child: CircularProgressIndicator()),

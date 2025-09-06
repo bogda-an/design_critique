@@ -2,21 +2,39 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-// Route args (so we can push with strong types)
 import '../widgets/app_bottom_nav.dart';
 import 'feedback_screen.dart' show FeedbackScreenArgs;
 import 'comments_screen.dart' show CommentsArgs;
 
-class HomeScreen extends StatelessWidget {
+enum _SortBy { dateDesc, starsDesc }
+enum _FilterBy { all, withComments, withoutComments }
+
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
   @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  final _auth = FirebaseAuth.instance;
+
+  // Sorting & filtering state
+  _SortBy _sortBy = _SortBy.dateDesc;
+  _FilterBy _filterBy = _FilterBy.all;
+
+  // Per-post stats for sorting/filtering
+  final Map<String, double> _avgCache = {};   // postId -> average stars
+  final Map<String, int> _countCache = {};    // postId -> comments count
+  final Set<String> _inflight = {};           // postIds currently loading
+  bool _loadingStats = false;
+
+  @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
+    final user = _auth.currentUser;
     if (user == null) return const _LoginRedirect();
 
-    final usersRef =
-        FirebaseFirestore.instance.collection('users').doc(user.uid);
+    final usersRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
 
     final postsQuery = FirebaseFirestore.instance
         .collection('posts')
@@ -33,7 +51,7 @@ class HomeScreen extends StatelessWidget {
 
             return CustomScrollView(
               slivers: [
-                // Greeting
+                // Header
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -47,8 +65,9 @@ class HomeScreen extends StatelessWidget {
                           ),
                         ),
                         IconButton(
-                          onPressed: () {},
+                          onPressed: _showHeaderMenu,
                           icon: const Icon(Icons.more_horiz),
+                          tooltip: 'More',
                         ),
                       ],
                     ),
@@ -69,22 +88,24 @@ class HomeScreen extends StatelessWidget {
                   ),
                 ),
 
-                // Sort / Filter (visual only)
+                // Sort / Filter
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Row(
                       children: [
                         OutlinedButton.icon(
-                          onPressed: () {},
+                          onPressed: _pickSortBy,
                           icon: const Icon(Icons.swap_vert),
-                          label: const Text('Sort by'),
+                          label: Text(
+                            _sortBy == _SortBy.dateDesc ? 'Sort by' : 'Sort: Stars',
+                          ),
                         ),
                         const SizedBox(width: 8),
                         OutlinedButton.icon(
-                          onPressed: () {},
+                          onPressed: _pickFilters,
                           icon: const Icon(Icons.filter_alt_outlined),
-                          label: const Text('Filters'),
+                          label: Text(_filterLabel),
                         ),
                       ],
                     ),
@@ -120,38 +141,75 @@ class HomeScreen extends StatelessWidget {
                         );
                       }
 
-                      return ListView.separated(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                        itemCount: docs.length,
-                        separatorBuilder: (_, __) =>
-                            const SizedBox(height: 16),
-                        itemBuilder: (context, i) {
-                          final doc = docs[i];
-                          final p = doc.data();
-                          final postId = doc.id;
+                      // Make sure stats are loaded only when needed and only for missing ids
+                      _ensureStatsLoadedOnce(docs);
 
-                          final title =
-                              (p['title'] as String?) ?? 'Untitled design';
-                          final description =
-                              (p['description'] as String?) ?? '';
-                          final authorId = (p['authorId'] as String?) ?? '';
-                          final authorName =
-                              (p['authorName'] as String?) ?? 'Anonymous';
-                          final coverUrl = (p['coverUrl'] as String?);
-                          final createdAt = p['createdAt'];
+                      // Work on a local list
+                      final items = List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(docs);
 
-                          return _PostCard(
-                            postId: postId,
-                            title: title,
-                            description: description,
-                            authorId: authorId,
-                            authorName: authorName,
-                            coverUrl: coverUrl,
-                            createdAt: createdAt,
-                          );
-                        },
+                      final needStats = _sortBy == _SortBy.starsDesc || _filterBy != _FilterBy.all;
+                      final allReady = !needStats || _statsReadyFor(items.map((d) => d.id));
+
+                      // Filter
+                      if (needStats && allReady && _filterBy != _FilterBy.all) {
+                        items.retainWhere((d) {
+                          final count = _countCache[d.id] ?? 0;
+                          return _filterBy == _FilterBy.withComments ? count > 0 : count == 0;
+                        });
+                      }
+
+                      // Sort
+                      if (needStats && allReady && _sortBy == _SortBy.starsDesc) {
+                        items.sort((a, b) {
+                          final aa = _avgCache[a.id] ?? -1; // unknown last
+                          final bb = _avgCache[b.id] ?? -1;
+                          if (aa == bb) {
+                            return _compareDateDesc(a.data()['createdAt'], b.data()['createdAt']);
+                          }
+                          return bb.compareTo(aa);
+                        });
+                      } else {
+                        // date desc (same as query)
+                        items.sort((a, b) => _compareDateDesc(a.data()['createdAt'], b.data()['createdAt']));
+                      }
+
+                      return Column(
+                        children: [
+                          if (_loadingStats || (needStats && !allReady))
+                            const Padding(
+                              padding: EdgeInsets.only(bottom: 6),
+                              child: LinearProgressIndicator(minHeight: 2),
+                            ),
+                          ListView.separated(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                            itemCount: items.length,
+                            separatorBuilder: (_, __) => const SizedBox(height: 16),
+                            itemBuilder: (context, i) {
+                              final doc = items[i];
+                              final p = doc.data();
+                              final postId = doc.id;
+
+                              final title = (p['title'] as String?) ?? 'Untitled design';
+                              final description = (p['description'] as String?) ?? '';
+                              final authorId = (p['authorId'] as String?) ?? '';
+                              final authorName = (p['authorName'] as String?) ?? 'Anonymous';
+                              final coverUrl = (p['coverUrl'] as String?);
+                              final createdAt = p['createdAt'];
+
+                              return _PostCard(
+                                postId: postId,
+                                title: title,
+                                description: description,
+                                authorId: authorId,
+                                authorName: authorName,
+                                coverUrl: coverUrl,
+                                createdAt: createdAt,
+                              );
+                            },
+                          ),
+                        ],
                       );
                     },
                   ),
@@ -162,9 +220,199 @@ class HomeScreen extends StatelessWidget {
         ),
       ),
 
-      // ✅ unified bottom nav (works the same on all pages)
       bottomNavigationBar: const AppBottomNav(current: BottomTab.home),
     );
+  }
+
+  // ---------- Header 3-dots ----------
+  void _showHeaderMenu() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.settings_outlined),
+              title: const Text('Go to Settings'),
+              onTap: () {
+                Navigator.pop(ctx);
+                Navigator.of(context).pushNamed('/settings');
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ---------- Sort / Filter pickers ----------
+  Future<void> _pickSortBy() async {
+    final choice = await showModalBottomSheet<_SortBy>(
+      context: context,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            RadioListTile<_SortBy>(
+              value: _SortBy.dateDesc,
+              groupValue: _sortBy,
+              title: const Text('Date (newest first)'),
+              onChanged: (v) => Navigator.pop(ctx, v),
+            ),
+            RadioListTile<_SortBy>(
+              value: _SortBy.starsDesc,
+              groupValue: _sortBy,
+              title: const Text('Stars (highest first)'),
+              onChanged: (v) => Navigator.pop(ctx, v),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (choice != null && mounted) {
+      setState(() => _sortBy = choice);
+    }
+  }
+
+  Future<void> _pickFilters() async {
+    final choice = await showModalBottomSheet<_FilterBy>(
+      context: context,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      builder: (ctx) => SafeArea(
+      child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            RadioListTile<_FilterBy>(
+              value: _FilterBy.all,
+              groupValue: _filterBy,
+              title: const Text('All posts'),
+              onChanged: (v) => Navigator.pop(ctx, v),
+            ),
+            RadioListTile<_FilterBy>(
+              value: _FilterBy.withComments,
+              groupValue: _filterBy,
+              title: const Text('With comments'),
+              onChanged: (v) => Navigator.pop(ctx, v),
+            ),
+            RadioListTile<_FilterBy>(
+              value: _FilterBy.withoutComments,
+              groupValue: _filterBy,
+              title: const Text('Without comments'),
+              onChanged: (v) => Navigator.pop(ctx, v),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (choice != null && mounted) {
+      setState(() => _filterBy = choice);
+    }
+  }
+
+  String get _filterLabel {
+    switch (_filterBy) {
+      case _FilterBy.all:
+        return 'Filters';
+      case _FilterBy.withComments:
+        return 'With comments';
+      case _FilterBy.withoutComments:
+        return 'Without comments';
+    }
+  }
+
+  // ---------- Stats loading (only once per post) ----------
+  void _ensureStatsLoadedOnce(List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) async {
+    // Only if we actually need stats
+    final needStats = _sortBy == _SortBy.starsDesc || _filterBy != _FilterBy.all;
+    if (!needStats) return;
+
+    // Load only missing ids and avoid double-loading
+    final toLoad = <String>[];
+    for (final d in docs) {
+      final id = d.id;
+      final missing = !_avgCache.containsKey(id) || !_countCache.containsKey(id);
+      if (missing && !_inflight.contains(id)) {
+        toLoad.add(id);
+      }
+    }
+
+    if (toLoad.isEmpty) {
+      // Nothing new to fetch → ensure the thin loader is hidden
+      if (_loadingStats) setState(() => _loadingStats = false);
+      return;
+    }
+
+    setState(() => _loadingStats = true);
+    try {
+      await Future.wait(toLoad.map(_loadOnePostStats));
+    } finally {
+      if (mounted) setState(() => _loadingStats = false);
+    }
+  }
+
+    bool _statsReadyFor(Iterable<String> ids) {
+    // Ready only when ALL requested posts have both average and count cached.
+    for (final id in ids) {
+      if (!_avgCache.containsKey(id) || !_countCache.containsKey(id)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  Future<void> _loadOnePostStats(String postId) async {
+    _inflight.add(postId);
+    try {
+      final fb = await FirebaseFirestore.instance
+          .collection('posts')
+          .doc(postId)
+          .collection('feedback')
+          .get();
+
+      int count = fb.size;
+      double sum = 0;
+      for (final doc in fb.docs) {
+        final m = doc.data();
+        // 1) ratings.overall (0..5)
+        final ratings = (m['ratings'] as Map?) ?? {};
+        final overall = ratings['overall'];
+        if (overall is num) sum += overall.toDouble();
+        // 2) or an 'avg' field (compat)
+        if (overall == null && m['avg'] is num) sum += (m['avg'] as num).toDouble();
+      }
+      final avg = count == 0 ? 0.0 : (sum / count);
+
+      _avgCache[postId] = avg;
+      _countCache[postId] = count;
+
+      // Trigger re-sort/re-filter as stats arrive
+      if (mounted) setState(() {});
+    } catch (_) {
+      // In case of error, still mark as "ready" with safe defaults
+      _avgCache[postId] = 0.0;
+      _countCache[postId] = 0;
+      if (mounted) setState(() {});
+    } finally {
+      _inflight.remove(postId);
+    }
+  }
+
+  int _compareDateDesc(dynamic a, dynamic b) {
+    DateTime? da;
+    DateTime? db;
+    if (a is Timestamp) da = a.toDate();
+    if (a is DateTime) da = a;
+    if (b is Timestamp) db = b.toDate();
+    if (b is DateTime) db = b;
+    da ??= DateTime.fromMillisecondsSinceEpoch(0);
+    db ??= DateTime.fromMillisecondsSinceEpoch(0);
+    return db.compareTo(da);
   }
 
   String _fallbackName(String? email) {
@@ -314,7 +562,6 @@ class _PostCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Title
                 Text(
                   title,
                   style: const TextStyle(
@@ -322,12 +569,10 @@ class _PostCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
 
-                // Feedback summary (stars + grade + count)
                 _FeedbackSummary(postId: postId),
 
                 const SizedBox(height: 10),
 
-                // Author line (avatar + name + date)
                 _AuthorLine(
                   authorId: authorId,
                   authorName: authorName,
@@ -336,7 +581,6 @@ class _PostCard extends StatelessWidget {
 
                 const SizedBox(height: 10),
 
-                // Description
                 if (description.isNotEmpty)
                   Text(
                     description,
@@ -345,7 +589,6 @@ class _PostCard extends StatelessWidget {
 
                 const SizedBox(height: 12),
 
-                // Action row: Give Feedback / Comments
                 _ActionsRow(
                   postId: postId,
                   currentUid: currentUid,
@@ -364,7 +607,6 @@ class _PostCard extends StatelessWidget {
   }
 }
 
-/// Square 340x340 image, crops from the bottom (keeps top).
 class _SquareNetworkImage extends StatelessWidget {
   const _SquareNetworkImage({
     required this.url,
@@ -394,7 +636,7 @@ class _SquareNetworkImage extends StatelessWidget {
               child: Image.network(
                 url,
                 fit: BoxFit.cover,
-                alignment: Alignment.topCenter, // keep top, crop bottom
+                alignment: Alignment.topCenter,
                 errorBuilder: (_, __, ___) => Container(
                   color: Colors.grey.shade200,
                   alignment: Alignment.center,
@@ -409,7 +651,6 @@ class _SquareNetworkImage extends StatelessWidget {
   }
 }
 
-/// Stars + numeric + feedback count (live from posts/{postId}/feedback)
 class _FeedbackSummary extends StatelessWidget {
   const _FeedbackSummary({required this.postId});
   final String postId;
@@ -434,6 +675,9 @@ class _FeedbackSummary extends StatelessWidget {
             final ratings = (m['ratings'] as Map?) ?? {};
             final overall = ratings['overall'];
             if (overall is num) sum += overall.toDouble();
+            if (overall == null && m['avg'] is num) {
+              sum += (m['avg'] as num).toDouble();
+            }
           }
           avg = sum / count;
         }
@@ -456,7 +700,6 @@ class _FeedbackSummary extends StatelessWidget {
   }
 }
 
-/// 0..5 stars supporting halves
 class _Stars extends StatelessWidget {
   const _Stars({required this.value});
   final double value;
@@ -464,7 +707,6 @@ class _Stars extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const double iconSize = 18;
-
     final full = value.floor();
     final frac = value - full;
     final hasHalf = frac >= 0.25 && frac < 0.75;
@@ -486,7 +728,6 @@ class _Stars extends StatelessWidget {
   }
 }
 
-/// Author avatar + name + post date
 class _AuthorLine extends StatelessWidget {
   const _AuthorLine({
     required this.authorId,
@@ -557,7 +798,6 @@ class _AuthorLine extends StatelessWidget {
   }
 }
 
-/// Row with Give Feedback (disabled if already submitted) and Comments.
 class _ActionsRow extends StatelessWidget {
   const _ActionsRow({
     required this.postId,

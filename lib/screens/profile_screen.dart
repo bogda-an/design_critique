@@ -89,8 +89,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         SnackBar(content: Text(e.message ?? 'Failed to delete')),
       );
     } finally {
-      if (!mounted) return;
-      setState(() => _busyDelete = false);
+      if (mounted) {
+        setState(() => _busyDelete = false);
+      }
     }
   }
 
@@ -122,7 +123,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 leading: ClipRRect(
                   borderRadius: BorderRadius.circular(8),
                   child: (coverUrl != null && (coverUrl).isNotEmpty)
-                      ? Image.network(coverUrl!, width: 48, height: 48, fit: BoxFit.cover)
+                      ? Image.network(coverUrl, width: 48, height: 48, fit: BoxFit.cover)
                       : Container(width: 48, height: 48, color: Colors.grey.shade200,
                           child: const Icon(Icons.image_outlined, color: Colors.black54)),
                 ),
@@ -248,8 +249,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         SnackBar(content: Text(e.message ?? 'Failed to delete comment')),
       );
     } finally {
-      if (!mounted) return;
-      setState(() => _busyDelete = false);
+      if (mounted) {
+        setState(() => _busyDelete = false);
+      }
     }
   }
 
@@ -733,7 +735,7 @@ class _DesignCard extends StatelessWidget {
                           top: 8,
                           right: 8,
                           child: Material(
-                            color: Colors.black.withOpacity(0.50),
+                            color: Colors.black.withValues(alpha: 0.50),
                             borderRadius: BorderRadius.circular(18),
                             child: InkWell(
                               borderRadius: BorderRadius.circular(18),
