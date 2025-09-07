@@ -345,7 +345,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       builder: (ctx) => Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisSize: MainAxisSize   .min,
           children: [
             Row(
               children: [
@@ -412,8 +412,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         .collectionGroup('feedback')
         .where('reviewerId', isEqualTo: uid)
         .orderBy('createdAt', descending: true);
-
-    const accent = Color(0xFFD6C433);
 
     return Scaffold(
       body: SafeArea(
@@ -640,7 +638,42 @@ class _ProfileScreenState extends State<ProfileScreen> {
           },
         ),
       ),
-      bottomNavigationBar: const _NavBar(current: 2, accent: accent),
+      // ==== Upload-style bottom nav ====
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(28),
+              boxShadow: const [
+                BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, 2)),
+              ],
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _NavItem(
+                  icon: Icons.home_rounded,
+                  label: 'Home',
+                  onTap: () => Navigator.pushReplacementNamed(context, '/home'),
+                ),
+                _NavItem(
+                  icon: Icons.add_circle,
+                  label: 'Upload',
+                  onTap: () => Navigator.pushReplacementNamed(context, '/upload'),
+                ),
+                const _NavItem(
+                  icon: Icons.person_rounded,
+                  label: 'Profile',
+                  active: true,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -909,59 +942,26 @@ class _CritiqueCard extends StatelessWidget {
   }
 }
 
-/// ---- Bottom nav (same behavior as other screens)
-class _NavBar extends StatelessWidget {
-  final int current;
-  final Color accent;
-  const _NavBar({required this.current, required this.accent});
-
-  @override
-  Widget build(BuildContext context) {
-    Color colorFor(bool sel) => sel ? accent : Colors.black87;
-
-    void go(int idx) {
-      if (idx == current) return;
-      final route = idx == 0 ? '/home' : idx == 1 ? '/upload' : '/profile';
-      Navigator.of(context).pushReplacementNamed(route);
-    }
-
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -2))],
-        borderRadius: BorderRadius.only(topLeft: Radius.circular(18), topRight: Radius.circular(18)),
-      ),
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          _NavBtn(icon: Icons.home_rounded,  label: 'Home',   color: colorFor(current == 0), onTap: () => go(0)),
-          _NavBtn(icon: Icons.add_circle,    label: 'Upload', color: colorFor(current == 1), onTap: () => go(1)),
-          _NavBtn(icon: Icons.person_rounded,label: 'Profile',color: colorFor(current == 2), onTap: () => go(2)),
-        ],
-      ),
-    );
-  }
-}
-
-class _NavBtn extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _NavBtn({
+/// ==== Upload-style nav item (same as Upload screen) ====
+class _NavItem extends StatelessWidget {
+  const _NavItem({
     required this.icon,
     required this.label,
-    required this.color,
-    required this.onTap,
+    this.active = false,
+    this.onTap,
   });
+
+  final IconData icon;
+  final String label;
+  final bool active;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
+    final color = active ? const Color(0xFFD9C63F) : Colors.black87;
     return InkWell(
-      borderRadius: BorderRadius.circular(16),
       onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         child: Column(
