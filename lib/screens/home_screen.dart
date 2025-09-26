@@ -19,14 +19,14 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final _auth = FirebaseAuth.instance;
 
-  // Sorting & filtering state
+  
   _SortBy _sortBy = _SortBy.dateDesc;
   _FilterBy _filterBy = _FilterBy.all;
 
-  // Per-post stats for sorting/filtering
-  final Map<String, double> _avgCache = {};   // postId -> average stars
-  final Map<String, int> _countCache = {};    // postId -> comments count
-  final Set<String> _inflight = {};           // postIds currently loading
+ 
+  final Map<String, double> _avgCache = {};   
+  final Map<String, int> _countCache = {};    
+  final Set<String> _inflight = {};           
   bool _loadingStats = false;
 
   @override
@@ -51,7 +51,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
             return CustomScrollView(
               slivers: [
-                // Header (unchanged, no extra top spacer)
+                
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -74,10 +74,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
 
-                // === 40px gap between header and slogo ===
+                
                 const SliverToBoxAdapter(child: SizedBox(height: 40)),
 
-                // Slogo centered
+                
                 const SliverToBoxAdapter(
                   child: Padding(
                     padding: EdgeInsets.symmetric(horizontal: 16),
@@ -95,10 +95,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
 
-                // === 40px gap below slogo ===
+              
                 const SliverToBoxAdapter(child: SizedBox(height: 40)),
 
-                // Sort / Filter — right aligned, pill design
+                
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -143,10 +143,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
 
-                // === 12px gap before cards ===
+                
                 const SliverToBoxAdapter(child: SizedBox(height: 12)),
 
-                // Posts list
+               
                 SliverToBoxAdapter(
                   child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                     stream: postsQuery.snapshots(),
@@ -174,16 +174,16 @@ class _HomeScreenState extends State<HomeScreen> {
                         );
                       }
 
-                      // Make sure stats are loaded only when needed and only for missing ids
+                      
                       _ensureStatsLoadedOnce(docs);
 
-                      // Work on a local list
+                      
                       final items = List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(docs);
 
                       final needStats = _sortBy == _SortBy.starsDesc || _filterBy != _FilterBy.all;
                       final allReady = !needStats || _statsReadyFor(items.map((d) => d.id));
 
-                      // Filter
+                     
                       if (needStats && allReady && _filterBy != _FilterBy.all) {
                         items.retainWhere((d) {
                           final count = _countCache[d.id] ?? 0;
@@ -191,7 +191,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         });
                       }
 
-                      // Sort
+                      
                       if (needStats && allReady && _sortBy == _SortBy.starsDesc) {
                         items.sort((a, b) {
                           final aa = _avgCache[a.id] ?? -1; // unknown last
@@ -202,7 +202,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           return bb.compareTo(aa);
                         });
                       } else {
-                        // date desc (same as query)
+                        
                         items.sort((a, b) => _compareDateDesc(a.data()['createdAt'], b.data()['createdAt']));
                       }
 
@@ -257,7 +257,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ---------- Header 3-dots ----------
+  
   void _showHeaderMenu() async {
     await showModalBottomSheet<void>(
       context: context,
@@ -281,7 +281,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ---------- Sort / Filter pickers ----------
+ 
   Future<void> _pickSortBy() async {
     final choice = await showModalBottomSheet<_SortBy>(
       context: context,
@@ -359,13 +359,13 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // ---------- Stats loading (only once per post) ----------
+  
   void _ensureStatsLoadedOnce(List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) async {
-    // Only if we actually need stats
+    
     final needStats = _sortBy == _SortBy.starsDesc || _filterBy != _FilterBy.all;
     if (!needStats) return;
 
-    // Load only missing ids and avoid double-loading
+    
     final toLoad = <String>[];
     for (final d in docs) {
       final id = d.id;
@@ -376,7 +376,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     if (toLoad.isEmpty) {
-      // Nothing new to fetch → ensure the thin loader is hidden
+      
       if (_loadingStats) setState(() => _loadingStats = false);
       return;
     }
@@ -390,7 +390,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
     bool _statsReadyFor(Iterable<String> ids) {
-    // Ready only when ALL requested posts have both average and count cached.
+    
     for (final id in ids) {
       if (!_avgCache.containsKey(id) || !_countCache.containsKey(id)) {
         return false;
@@ -424,10 +424,10 @@ class _HomeScreenState extends State<HomeScreen> {
       _avgCache[postId] = avg;
       _countCache[postId] = count;
 
-      // Trigger re-sort/re-filter as stats arrive
+      
       if (mounted) setState(() {});
     } catch (_) {
-      // In case of error, still mark as "ready" with safe defaults
+      
       _avgCache[postId] = 0.0;
       _countCache[postId] = 0;
       if (mounted) setState(() {});
@@ -454,7 +454,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-/// Redirect helper so we don’t use BuildContext across async gaps
+
 class _LoginRedirect extends StatefulWidget {
   const _LoginRedirect();
   @override
@@ -549,7 +549,7 @@ class _StatusMessage extends StatelessWidget {
   }
 }
 
-/// ===== Post Card =====
+
 class _PostCard extends StatelessWidget {
   const _PostCard({
     required this.postId,
@@ -589,7 +589,7 @@ class _PostCard extends StatelessWidget {
                   const BorderRadius.vertical(top: Radius.circular(16)),
             ),
 
-          // Body
+          
           Padding(
             padding: const EdgeInsets.all(12),
             child: Column(

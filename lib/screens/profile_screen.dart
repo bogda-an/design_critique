@@ -1,4 +1,3 @@
-// lib/screens/profile_screen.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -6,7 +5,6 @@ import 'package:flutter/material.dart';
 import '../screens/comments_screen.dart' show CommentsArgs;
 import '../screens/comment_detail_screen.dart' show CommentDetailArgs;
 
-/// ------------- Helpers -------------
 
 String _fmtDate(DateTime d) {
   const m = [
@@ -32,7 +30,6 @@ Widget stars(double? rating, {double size = 18}) {
   );
 }
 
-/// ------------- Screen -------------
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, this.onOpenSettings});
@@ -64,18 +61,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return build();
   }
 
-  // ---------- Delete helpers (no UI changes elsewhere) ----------
   Future<void> _deleteDesignAndComments(String postId) async {
     setState(() => _busyDelete = true);
     try {
       final postRef = _db.collection('posts').doc(postId);
-      // delete all feedback docs
       final fb = await postRef.collection('feedback').get();
       final batch = _db.batch();
       for (final d in fb.docs) {
         batch.delete(d.reference);
       }
-      // delete the post itself
       batch.delete(postRef);
       await batch.commit();
 
@@ -429,7 +423,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Header
                       Row(
                         children: [
                           CircleAvatar(
@@ -476,14 +469,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800)),
                       const SizedBox(height: 12),
 
-                      // DESIGNS GRID (responsive)
                       LayoutBuilder(
                         builder: (context, constraints) {
                           final w = constraints.maxWidth;
-                          // keep 2 columns for phones
                           const crossAxisCount = 2;
 
-                          // Make cards taller on narrow screens to prevent overflow
                           final ratio = w < 360
                               ? 0.56
                               : (w < 420 ? 0.62 : (w < 520 ? 0.70 : 0.80));
@@ -531,7 +521,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     title: title,
                                     authorName: authorName,
                                     createdAtText: created != null ? _fmtDate(created) : '--',
-                                    // NEW: callback for 3-dots
                                     onMore: () => _showDesignActions(
                                       postId: doc.id,
                                       title: title,
@@ -550,7 +539,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800)),
                       const SizedBox(height: 8),
 
-                      // CRITIQUES LIST
                       StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                         stream: myCritiquesQ.snapshots(),
                         builder: (context, snap) => _guard(snap, () {
@@ -598,7 +586,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     rating: avg,
                                     commentPreview: comment.isEmpty ? '(no text)' : comment,
                                     onTap: () {
-                                      final reviewerUid = fbDoc.id; // feedback doc id == reviewer uid
+                                      final reviewerUid = fbDoc.id; 
                                       Navigator.of(context).pushNamed(
                                         '/commentDetail',
                                         arguments: CommentDetailArgs(
@@ -607,7 +595,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                         ),
                                       );
                                     },
-                                    // NEW: 3-dots for comment delete
                                     onMore: () {
                                       final reviewerUid = fbDoc.id;
                                       _showCommentActions(
@@ -638,7 +625,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           },
         ),
       ),
-      // ==== Upload-style bottom nav ====
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
@@ -678,7 +664,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
-/// ------------- Cards -------------
 
 class _DesignCard extends StatelessWidget {
   const _DesignCard({
@@ -750,7 +735,6 @@ class _DesignCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // image with 3-dots overlay (keeps exact layout)
                 Expanded(
                   child: ClipRRect(
                     borderRadius: const BorderRadius.only(
@@ -785,7 +769,6 @@ class _DesignCard extends StatelessWidget {
                   ),
                 ),
 
-                // Title pill
                 Padding(
                   padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
                   child: Container(
@@ -807,7 +790,6 @@ class _DesignCard extends StatelessWidget {
                   ),
                 ),
 
-                // stars + rating + comments
                 Padding(
                   padding: const EdgeInsets.fromLTRB(12, 6, 12, 4),
                   child: Row(
@@ -839,7 +821,6 @@ class _DesignCard extends StatelessWidget {
                   ),
                 ),
 
-                // Date
                 Padding(
                   padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
                   child: Text(
@@ -918,8 +899,7 @@ class _CritiqueCard extends StatelessWidget {
                       rating != null ? rating!.toStringAsFixed(1) : '—',
                       style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
                     ),
-                    const SizedBox(width: 8),
-                    // 3-dots for comment item
+                    const SizedBox(width: 8),                    
                     IconButton(
                       icon: const Icon(Icons.more_horiz),
                       onPressed: onMore,
@@ -942,7 +922,6 @@ class _CritiqueCard extends StatelessWidget {
   }
 }
 
-/// ==== Upload-style nav item (same as Upload screen) ====
 class _NavItem extends StatelessWidget {
   const _NavItem({
     required this.icon,

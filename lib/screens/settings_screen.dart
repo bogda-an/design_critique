@@ -1,4 +1,3 @@
-// lib/screens/settings_screen.dart
 import 'dart:io' show File;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -19,7 +18,6 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool saving = false;
 
-  // ---------- Photo ----------
   Future<void> _pickAndUploadPhoto() async {
     final fa.User user = fa.FirebaseAuth.instance.currentUser!;
     final uid = user.uid;
@@ -52,7 +50,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  // ---------- Inline editor ----------
   Future<void> _editText({
     required String title,
     String initial = '',
@@ -110,7 +107,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  // ---------- Email (verify-first; matches `pendingEmail` in your schema) ----------
   Future<void> _changeEmailDirect() async {
     final usersRef = FirebaseFirestore.instance
         .collection('users')
@@ -171,15 +167,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     setState(() => saving = true);
     try {
-      // 1) recent login required
       final fa.User current = fa.FirebaseAuth.instance.currentUser!;
       final cred = fa.EmailAuthProvider.credential(email: current.email!, password: password);
       await current.reauthenticateWithCredential(cred);
 
-      // 2) send verification to NEW email; Auth will finalize after user clicks it
       await current.verifyBeforeUpdateEmail(newEmail);
 
-      // 3) reflect pending state in Firestore (do not overwrite `email` yet)
       await usersRef.update({
         'pendingEmail': newEmail,
         'updatedAt': FieldValue.serverTimestamp(),
@@ -202,7 +195,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  // Resend verification to the pending email
   Future<void> _resendVerificationForPendingEmail(String pendingEmail) async {
     final fa.User current = fa.FirebaseAuth.instance.currentUser!;
     setState(() => saving = true);
@@ -223,7 +215,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   
-  // ---------- Log out ----------
   Future<void> _confirmAndLogout() async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -247,7 +238,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
     }
   }
-// Cancel the pending change (clears Firestore flag)
   Future<void> _cancelPendingEmailChange(
     DocumentReference<Map<String, dynamic>> usersRef) async {
     setState(() => saving = true);
@@ -267,12 +257,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  // ---------- UI ----------
   @override
   Widget build(BuildContext context) {
     final fa.User? user = fa.FirebaseAuth.instance.currentUser;
     if (user == null) {
-      // When signed out, this screen might still rebuild once; render nothing.
       return const SizedBox.shrink();
     }
     final usersRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
@@ -307,7 +295,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const SizedBox(height: 10),
 
-                // Profile header
                 Material(
                   color: Colors.white,
                   elevation: 1,
@@ -333,7 +320,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                 const SizedBox(height: 12),
 
-                // Show pending email notice (if any)
                 if (pendingEmail.isNotEmpty) ...[
                   Material(
                     color: Colors.white,
@@ -361,7 +347,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const SizedBox(height: 12),
                 ],
 
-                // Name
                 _SettingTile(
                   icon: Icons.person_outline,
                   title: 'Name',
@@ -378,7 +363,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                 ),
 
-                // Username (rules: /usernames/{unameLower} has { uid: ... })
                 _SettingTile(
                   icon: Icons.badge_outlined,
                   title: 'Username',
@@ -431,7 +415,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                 ),
 
-                // Email – change (verify-first)
                 _SettingTile(
                   icon: Icons.email_outlined,
                   title: 'Email',
@@ -440,7 +423,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onTap: saving ? null : _changeEmailDirect,
                 ),
 
-                // Phone
                 _SettingTile(
                   icon: Icons.phone_outlined,
                   title: 'Phone',
@@ -456,7 +438,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                 ),
 
-                // Toggles
                 _ToggleTile(
                   icon: Icons.notifications_none,
                   title: 'Push Notifications',
@@ -473,7 +454,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
 
                 
-                // Log out
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 6),
                   child: Material(

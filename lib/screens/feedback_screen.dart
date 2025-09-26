@@ -5,15 +5,15 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../widgets/app_bottom_nav.dart';
 import 'design_view_screen.dart';
 
-/// Arguments for FeedbackScreen
+
 class FeedbackScreenArgs {
   final String postId;
   final String title;
   final String authorName;
-  final String? authorPhotoUrl; // optional avatar
-  final String? coverUrl;       // post image
-  final String? description;    // short description
-  final dynamic createdAt;      // Timestamp/DateTime optional
+  final String? authorPhotoUrl; 
+  final String? coverUrl;       
+  final String? description;    
+  final dynamic createdAt;     
 
   FeedbackScreenArgs({
     required this.postId,
@@ -33,10 +33,10 @@ class FeedbackScreen extends StatefulWidget {
 }
 
 class _FeedbackScreenState extends State<FeedbackScreen> {
-  // Ratings (tap stars 0–5)
+  
   double visual = 0, accessibility = 0, usability = 0, clarity = 0, overall = 0;
 
-  // Notes
+ 
   final visualC = TextEditingController();
   final accessibilityC = TextEditingController();
   final usabilityC = TextEditingController();
@@ -80,7 +80,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
           .collection('feedback')
           .doc(user.uid);
 
-      // Prevent duplicate feedback
+     
       final exists = (await doc.get()).exists;
       if (exists) {
         setState(() => submitting = false);
@@ -88,7 +88,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
         return;
       }
 
-      // Reviewer name + photo (profile → auth → fallback)
+      
       final profileSnap = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
@@ -179,7 +179,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
                 return ListView(
                   padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
                   children: [
-                    // Back header
+                    
                     Row(
                       children: [
                         IconButton(
@@ -198,7 +198,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
                       ],
                     ),
 
-                    // Author row (avatar, date, avg, count)
+                    
                     const SizedBox(height: 6),
                     Row(
                       children: [
@@ -245,7 +245,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
 
                     const SizedBox(height: 10),
 
-                    // Media + title + description + "Press to view design"
+                    
                     Material(
                       elevation: 1,
                       color: Colors.white,
@@ -255,7 +255,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // Image
+                            
                             InkWell(
                               onTap: (a.coverUrl?.isNotEmpty ?? false)
                                   ? () {
@@ -288,7 +288,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
                               ),
                             ),
                             const SizedBox(width: 12),
-                            // Title / description / CTA
+                           
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -334,7 +334,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
 
                     const SizedBox(height: 16),
 
-                    // Sections (stars + textfield)
+                    
                     _Section(
                       title: 'Visual Appeal',
                       question:
@@ -378,7 +378,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
 
                     const SizedBox(height: 10),
 
-                    // Cancel / Submit (pill style, right aligned, 12px gap)
+                    
                     Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
@@ -387,14 +387,14 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
                             Navigator.pop(context);
                           },
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF64330A), // cancel
+                            backgroundColor: const Color(0xFF64330A), 
                             foregroundColor: Colors.white,
                             elevation: 3,
                             shadowColor: Colors.black26,
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 20, vertical: 8), // <— updated
+                                horizontal: 20, vertical: 8), 
                             minimumSize: const Size(0, 40),
-                            shape: const StadiumBorder(), // pill
+                            shape: const StadiumBorder(), 
                             textStyle: const TextStyle(
                               fontWeight: FontWeight.w700,
                               letterSpacing: .25,
@@ -406,14 +406,14 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
                         ElevatedButton(
                           onPressed: submitting || alreadyLeft ? null : _submit,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFE1D145), // submit
-                            foregroundColor: Colors.white,               // <— text white
+                            backgroundColor: const Color(0xFFE1D145), 
+                            foregroundColor: Colors.white,               
                             elevation: 3,
                             shadowColor: Colors.black26,
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 20, vertical: 8), // <— updated
+                                horizontal: 20, vertical: 8),
                             minimumSize: const Size(0, 40),
-                            shape: const StadiumBorder(), // pill
+                            shape: const StadiumBorder(), 
                             textStyle: const TextStyle(
                               fontWeight: FontWeight.w700,
                               letterSpacing: .25,
@@ -436,7 +436,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
   }
 }
 
-// ---------- widgets ----------
+
 
 class _Section extends StatelessWidget {
   const _Section({
@@ -497,7 +497,7 @@ class StarPicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final filled = value.round(); // step 1 for clean UI like mockups
+    final filled = value.round(); 
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: List.generate(5, (i) {
@@ -547,7 +547,7 @@ class _Stars extends StatelessWidget {
   }
 }
 
-// utils
+
 DateTime? _toDate(dynamic v) {
   if (v == null) return null;
   if (v is DateTime) return v;

@@ -27,7 +27,6 @@ class _SingUpScreenState extends State<SignUpScreen> {
   }
 
   void _showMessage(String text) {
-    // Floating SnackBar that clears previous one and sits above the bottom buttons
     ScaffoldMessenger.of(context)
       ..clearSnackBars()
       ..showSnackBar(
@@ -50,7 +49,6 @@ class _SingUpScreenState extends State<SignUpScreen> {
       return;
     }
 
-    // Loading dialog
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -65,7 +63,6 @@ class _SingUpScreenState extends State<SignUpScreen> {
 
       await cred.user!.updateDisplayName(username);
 
-      // Optional: store essentials in Firestore
       await FirebaseFirestore.instance.collection('users').doc(cred.user!.uid).set({
         'username': username,
         'email': email,
@@ -73,7 +70,7 @@ class _SingUpScreenState extends State<SignUpScreen> {
       }, SetOptions(merge: true));
 
       if (!mounted) return;
-      Navigator.pop(context); // close loading
+      Navigator.pop(context); 
       Navigator.pushReplacementNamed(context, '/home');
     } on FirebaseAuthException catch (e) {
       if (mounted) Navigator.pop(context);
@@ -104,7 +101,6 @@ class _SingUpScreenState extends State<SignUpScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // Fixed button + footer so position matches Login page
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
@@ -138,7 +134,6 @@ class _SingUpScreenState extends State<SignUpScreen> {
         child: ListView(
           padding: const EdgeInsets.only(bottom: 120),
           children: [
-            // HERO IMAGE (edge to edge) — identical to Login
             SizedBox(
               height: 320,
               width: double.infinity,
@@ -149,7 +144,6 @@ class _SingUpScreenState extends State<SignUpScreen> {
               ),
             ),
 
-            // Content with horizontal padding — identical metrics to Login
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Column(
@@ -175,7 +169,6 @@ class _SingUpScreenState extends State<SignUpScreen> {
                           ?.copyWith(color: Colors.black54)),
                   const SizedBox(height: 24),
 
-                  // USERNAME (extra field vs Login)
                   Material(
                     elevation: 2,
                     shadowColor: Colors.black26,
@@ -194,7 +187,6 @@ class _SingUpScreenState extends State<SignUpScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  // EMAIL
                   Material(
                     elevation: 2,
                     shadowColor: Colors.black26,
@@ -214,7 +206,6 @@ class _SingUpScreenState extends State<SignUpScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  // PASSWORD (with same eye toggle)
                   Material(
                     elevation: 2,
                     shadowColor: Colors.black26,

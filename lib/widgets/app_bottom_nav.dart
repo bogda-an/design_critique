@@ -54,7 +54,6 @@ class AppBottomNav extends StatelessWidget {
     switch (dest) {
       case BottomTab.home:
         if (currentName == '/home' || currentName == Navigator.defaultRouteName) return;
-        // Go to home and clear the stack so the back button behaves
         Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
         break;
 
@@ -65,7 +64,6 @@ class AppBottomNav extends StatelessWidget {
 
       case BottomTab.profile:
         if (currentName == '/profile') return;
-        // Navigate if you have a profile route; otherwise show a friendly note
         try {
           Navigator.pushNamed(context, '/profile');
         } catch (_) {

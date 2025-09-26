@@ -5,7 +5,7 @@ import '../widgets/app_bottom_nav.dart';
 import 'comment_detail_screen.dart';
 import 'design_view_screen.dart';
 
-/// Keep description/createdAt optional so old call-sites work.
+
 class CommentsArgs {
   final String postId;
   final String title;
@@ -76,7 +76,7 @@ class CommentsScreen extends StatelessWidget {
                   ],
                 ),
 
-                // Header card like your mock
+                
                 const SizedBox(height: 6),
                 Material(
                   color: Colors.white,
@@ -87,7 +87,7 @@ class CommentsScreen extends StatelessWidget {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Image preview
+                        
                         InkWell(
                           onTap: (a.coverUrl?.isNotEmpty ?? false)
                               ? () {
@@ -117,12 +117,12 @@ class CommentsScreen extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 12),
-                        // Right content
+                        
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // Author row, date, rating + count
+                              
                               Row(
                                 children: [
                                   CircleAvatar(
@@ -219,7 +219,7 @@ class CommentsScreen extends StatelessWidget {
 
                 const SizedBox(height: 14),
 
-                // Title + Sort
+               
                 Row(
                   children: [
                     const Expanded(
@@ -241,7 +241,7 @@ class CommentsScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
 
-                // Comments list
+                
                 if (snap.connectionState == ConnectionState.waiting)
                   const Padding(
                     padding: EdgeInsets.all(24),
@@ -408,7 +408,7 @@ class _Stars extends StatelessWidget {
   }
 }
 
-// utils
+
 DateTime? _toDate(dynamic v) {
   if (v == null) return null;
   if (v is DateTime) return v;

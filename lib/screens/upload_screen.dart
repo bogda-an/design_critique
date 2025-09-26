@@ -19,7 +19,7 @@ class _UploadScreenState extends State<UploadScreen> {
 
   final _picker = ImagePicker();
   final List<XFile> _files = [];
-  final Map<String, double> _progress = {}; // file.path -> 0..1
+  final Map<String, double> _progress = {}; 
   bool _submitting = false;
 
   @override
@@ -41,7 +41,6 @@ class _UploadScreenState extends State<UploadScreen> {
   }
 
   Future<void> _pickImages() async {
-    // multi pick works on web + mobile
     final imgs = await _picker.pickMultiImage(imageQuality: 85, maxWidth: 2000);
     if (imgs.isNotEmpty) {
       setState(() {
@@ -74,7 +73,6 @@ class _UploadScreenState extends State<UploadScreen> {
     final postRef = db.collection('posts').doc();
     final postId = postRef.id;
 
-    // get author name from users/{uid}
     final userDoc = await db.collection('users').doc(uid).get();
     final authorName = (userDoc.data() ?? {})['username'] ?? 'Anonymous';
 
@@ -252,7 +250,6 @@ class _UploadScreenState extends State<UploadScreen> {
 
             const SizedBox(height: 20),
 
-            // ==== Buttons row (match Feedback screen) ====
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
@@ -269,13 +266,13 @@ class _UploadScreenState extends State<UploadScreen> {
                           Navigator.pop(context);
                         },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF64330A), // cancel color
+                    backgroundColor: const Color(0xFF64330A), 
                     foregroundColor: Colors.white,
                     elevation: 3,
                     shadowColor: Colors.black26,
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                     minimumSize: const Size(0, 40),
-                    shape: const StadiumBorder(), // pill
+                    shape: const StadiumBorder(), 
                     textStyle: const TextStyle(
                       fontWeight: FontWeight.w700,
                       letterSpacing: .25,
@@ -287,13 +284,13 @@ class _UploadScreenState extends State<UploadScreen> {
                 ElevatedButton(
                   onPressed: _submitting ? null : _submit,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFE1D145), // submit color
-                    foregroundColor: Colors.white, // white text
+                    backgroundColor: const Color(0xFFE1D145), 
+                    foregroundColor: Colors.white,
                     elevation: 3,
                     shadowColor: Colors.black26,
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                     minimumSize: const Size(0, 40),
-                    shape: const StadiumBorder(), // pill
+                    shape: const StadiumBorder(), 
                     textStyle: const TextStyle(
                       fontWeight: FontWeight.w700,
                       letterSpacing: .25,
@@ -348,7 +345,6 @@ class _Thumb extends StatelessWidget {
   Widget build(BuildContext context) {
     Widget img;
     if (kIsWeb) {
-      // On web path is a blob: URL; Image.network can render it.
       img = Image.network(path, width: 90, height: 90, fit: BoxFit.cover);
     } else {
       img = Image.file(io.File(path), width: 90, height: 90, fit: BoxFit.cover);

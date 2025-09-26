@@ -2,12 +2,11 @@ import 'package:flutter/material.dart';
 
 class DesignViewArgs {
   final String imageUrl;
-  final String postId; // used for Hero tag
+  final String postId; 
   DesignViewArgs({required this.imageUrl, required this.postId});
 }
 
-/// Full-screen, edge-to-edge design viewer with pinch-zoom.
-/// Route name suggestion: '/designView'
+
 class DesignViewScreen extends StatelessWidget {
   const DesignViewScreen({super.key});
 
@@ -21,7 +20,7 @@ class DesignViewScreen extends StatelessWidget {
       body: SafeArea(
         child: Column(
           children: [
-            // Top bar
+            
             Row(
               children: [
                 IconButton(
@@ -41,7 +40,7 @@ class DesignViewScreen extends StatelessWidget {
                 const SizedBox(width: 48),
               ],
             ),
-            // Image viewer
+            
             Expanded(
               child: Center(
                 child: Hero(

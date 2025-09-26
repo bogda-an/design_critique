@@ -21,7 +21,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _showMessage(String text) {
-    // Floating SnackBar that clears previous one and sits above the bottom buttons
+   
     ScaffoldMessenger.of(context)
       ..clearSnackBars()
       ..showSnackBar(
@@ -43,7 +43,7 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    // Loading dialog
+    
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -57,10 +57,10 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       if (!mounted) return;
-      Navigator.pop(context); // close loading
+      Navigator.pop(context); 
       Navigator.pushReplacementNamed(context, '/home');
     } on FirebaseAuthException catch (e) {
-      if (mounted) Navigator.pop(context); // close loading
+      if (mounted) Navigator.pop(context); 
       String msg;
       switch (e.code) {
         case 'user-not-found':
@@ -91,7 +91,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // Fixed button + footer so position matches across pages
+      
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
@@ -123,21 +123,21 @@ class _LoginScreenState extends State<LoginScreen> {
 
       body: SafeArea(
         child: ListView(
-          // no side padding so the image is full-bleed
+          
           padding: const EdgeInsets.only(bottom: 120),
           children: [
-            // HERO IMAGE (edge to edge)
+            
             SizedBox(
               height: 320,
               width: double.infinity,
               child: Image.asset(
                 'assets/images/pencils.jpg',
                 fit: BoxFit.cover,
-                alignment: const Alignment(0, -0.35), // nudge down
+                alignment: const Alignment(0, -0.35), 
               ),
             ),
 
-            // Content with horizontal padding
+          
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Column(
@@ -163,7 +163,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ?.copyWith(color: Colors.black54)),
                   const SizedBox(height: 24),
 
-                  // Email
+                  
                   Material(
                     elevation: 2,
                     shadowColor: Colors.black26,
@@ -183,7 +183,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  // Password
+                  
                   Material(
                     elevation: 2,
                     shadowColor: Colors.black26,
@@ -207,7 +207,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
 
-                  // extra gap before the fixed button
+                  
                   const SizedBox(height: 28),
                 ],
               ),

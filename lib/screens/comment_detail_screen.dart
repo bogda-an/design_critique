@@ -5,7 +5,7 @@ import '../widgets/app_bottom_nav.dart';
 
 class CommentDetailArgs {
   final String postId;
-  final String uid; // reviewer uid == feedback doc id
+  final String uid; 
   CommentDetailArgs({required this.postId, required this.uid});
 }
 
@@ -66,7 +66,7 @@ class CommentDetailScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
 
-                // Reviewer header
+                
                 Row(
                   children: [
                     CircleAvatar(
